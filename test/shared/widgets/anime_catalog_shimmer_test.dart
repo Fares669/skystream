@@ -140,4 +140,42 @@ void main() {
     expect(characterFirst.width, closeTo(animeFirst.width, 0.5));
     expect(characterReserved, lessThan(animeReserved));
   });
+
+  testWidgets('poster caption skeleton stays left aligned inside RTL rails', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Center(
+              child: SizedBox(
+                width: 120,
+                height: 240,
+                child: const AnimePosterShimmer(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final card = find.byType(AnimePosterShimmer);
+    final placeholders = find.descendant(
+      of: card,
+      matching: find.byType(ShimmerPlaceholder),
+    );
+    expect(placeholders, findsNWidgets(3));
+
+    final cardRect = tester.getRect(card);
+    final titleRect = tester.getRect(placeholders.at(1));
+    final metadataRect = tester.getRect(placeholders.at(2));
+
+    expect(titleRect.left, closeTo(cardRect.left + 2, 0.5));
+    expect(metadataRect.left, closeTo(cardRect.left + 2, 0.5));
+    expect(titleRect.right, lessThan(cardRect.right));
+    expect(metadataRect.right, lessThan(cardRect.right));
+  });
 }
