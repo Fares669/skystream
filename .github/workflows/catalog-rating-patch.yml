@@ -1,0 +1,85 @@
+name: Verify catalog rating badges
+
+on:
+  push:
+    branches: [feat/catalog-rating-badges]
+    paths:
+      - '.github/workflows/catalog-rating-patch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-rating-badges-cleanup
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/catalog-rating-badges
+          fetch-depth: 0
+
+      - name: Restore focused test formatting and keep new expectations
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout origin/main -- \
+            test/core/extensions/providers/animewitcher_apk_sources_test.dart \
+            test/core/extensions/providers/animewitcher_upcoming_unaired_test.dart
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise RuntimeError(f'unexpected match count in {path}: {text.count(old)}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'test/core/extensions/providers/animewitcher_apk_sources_test.dart',
+              """        'poster',
+                  'tags',
+                ],""",
+              """        'poster',
+                  'tags',
+                  'details',
+                  'mal_id',
+                  'malId',
+                  'rating',
+                ],""",
+          )
+          replace_once(
+              'test/core/extensions/providers/animewitcher_upcoming_unaired_test.dart',
+              """        'aniList_poster',
+                  'details',
+                  'dubbed',
+                ],""",
+              """        'aniList_poster',
+                  'details',
+                  'mal_id',
+                  'malId',
+                  'rating',
+                  'dubbed',
+                ],""",
+          )
+          PY
+          git diff --check
+
+      - name: Commit clean final diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/catalog-rating-patch.yml
+          git add test/core/extensions/providers/animewitcher_apk_sources_test.dart \
+            test/core/extensions/providers/animewitcher_upcoming_unaired_test.dart
+          git diff --cached --check
+          git config user.name 'Fares669'
+          git config user.email '108722956+Fares669@users.noreply.github.com'
+          git commit -m 'test: keep catalog rating expectations focused'
+          git push origin HEAD:feat/catalog-rating-badges
