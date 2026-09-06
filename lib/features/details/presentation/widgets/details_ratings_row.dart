@@ -14,6 +14,7 @@ import 'scale_rating_bar.dart';
 const Key kDetailsRatingsRowKey = Key('details-ratings-row');
 const Key kDetailsRatingsWitcherKey = Key('details-ratings-witcher');
 const Key kDetailsRatingsMalKey = Key('details-ratings-mal');
+const Key kDetailsRatingsImdbKey = Key('details-ratings-imdb');
 const Key kDetailsRatingsRateButtonKey = Key('details-ratings-rate-button');
 const Key kDetailsRatingsReviewsButtonKey = Key(
   'details-ratings-reviews-button',
@@ -21,8 +22,11 @@ const Key kDetailsRatingsReviewsButtonKey = Key(
 const Key kDetailsRatingsUserStarsKey = Key('details-ratings-user-stars');
 const Key kDetailsRatingsMalBadgeKey = Key('details-ratings-mal-badge');
 const Key kDetailsRatingsMalStarKey = Key('details-ratings-mal-star');
+const Key kDetailsRatingsImdbBadgeKey = Key('details-ratings-imdb-badge');
+const Key kDetailsRatingsImdbStarKey = Key('details-ratings-imdb-star');
 
 const Color kMalBadgeBlue = Color(0xFF2E51A2);
+const Color kImdbBadgeYellow = Color(0xFFF5C518);
 
 const String kRateLoginRequiredToast = 'يجب تسجيل الدخول';
 const String kReviewsClosedToast = 'تم ايقاف المراجعات علي هذا الأنمي';
@@ -42,8 +46,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
   bool _loadedRating = false;
   String? _loadedAnimeId;
 
-  AnimeDetailsRatings get _ratings =>
-      AnimeDetailsRatings.fromItem(widget.item);
+  AnimeDetailsRatings get _ratings => AnimeDetailsRatings.fromItem(widget.item);
 
   @override
   void initState() {
@@ -187,7 +190,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
     final ratings = _ratings;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final showMal = ratings.showMalColumn;
+    final showExternal = ratings.showExternalColumn;
 
     return DecoratedBox(
       key: kDetailsRatingsRowKey,
@@ -209,7 +212,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: _witcherColumn(context, ratings)),
-                  if (showMal) ...[
+                  if (showExternal) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: SizedBox(
@@ -221,7 +224,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
                         ),
                       ),
                     ),
-                    Expanded(child: _malColumn(context, ratings)),
+                    Expanded(child: _externalColumn(context, ratings)),
                   ],
                 ],
               ),
@@ -319,9 +322,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
                 enabled: ratings.canRate,
                 starSize: 18,
                 padding: const EdgeInsets.symmetric(horizontal: 1),
-                onChanged: ratings.canRate
-                    ? (_) => _onRatePressed()
-                    : null,
+                onChanged: ratings.canRate ? (_) => _onRatePressed() : null,
               ),
             ),
           ],
@@ -330,25 +331,37 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
     );
   }
 
-  Widget _malColumn(BuildContext context, AnimeDetailsRatings ratings) {
+  Widget _externalColumn(BuildContext context, AnimeDetailsRatings ratings) {
     final theme = Theme.of(context);
-    final mean = ratings.malMean;
-    final users = ratings.displayedMalScoringUsers;
+    final source = ratings.externalSource;
+    final isImdb = source == ExternalRatingSource.imdb;
+    final score = ratings.externalScore;
+    final users = ratings.displayedExternalScoringUsers;
+    final badgeColor = isImdb ? kImdbBadgeYellow : kMalBadgeBlue;
+    final badgeTextColor = isImdb ? Colors.black : Colors.white;
+    final columnKey = isImdb ? kDetailsRatingsImdbKey : kDetailsRatingsMalKey;
+    final badgeKey = isImdb
+        ? kDetailsRatingsImdbBadgeKey
+        : kDetailsRatingsMalBadgeKey;
+    final starKey = isImdb
+        ? kDetailsRatingsImdbStarKey
+        : kDetailsRatingsMalStarKey;
+
     return KeyedSubtree(
-      key: kDetailsRatingsMalKey,
+      key: columnKey,
       child: Column(
         children: [
           Container(
-            key: kDetailsRatingsMalBadgeKey,
+            key: badgeKey,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: kMalBadgeBlue,
+              color: badgeColor,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              'MAL',
+              isImdb ? 'IMDb' : 'MAL',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: Colors.white,
+                color: badgeTextColor,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.6,
               ),
@@ -359,15 +372,15 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
             textDirection: TextDirection.ltr,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                key: kDetailsRatingsMalStarKey,
+              Icon(
+                key: starKey,
                 Icons.star_rounded,
                 size: 26,
-                color: kMalBadgeBlue,
+                color: badgeColor,
               ),
               const SizedBox(width: 6),
               Text(
-                mean == null ? '—' : formatRatingScore(mean),
+                score == null ? '—' : formatRatingScore(score),
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                   height: 1,
@@ -377,7 +390,11 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
           ),
           const SizedBox(height: 4),
           Text(
-            users == null ? 'MAL Score' : '($users)',
+            isImdb
+                ? 'IMDb Score'
+                : users == null
+                ? 'MAL Score'
+                : '($users)',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

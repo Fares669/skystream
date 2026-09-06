@@ -1,10 +1,13 @@
 import '../../../core/account/animewitcher_comment_models.dart';
 import '../../../core/domain/entity/multimedia_item.dart';
 
+enum ExternalRatingSource { mal, imdb }
+
 /// Parsed APK details ratings fields for the details page row.
 ///
-/// Witcher score is `rating.rate`. MAL uses `details.mal_mean` and
-/// `details.mal_num_scoring_users`. Vote counts are never invented.
+/// Witcher score is `rating.rate`. MAL is the primary external score; when
+/// AnimeWitcher's APK has no usable MAL score it falls back to
+/// `details.imdb_rate`. Vote counts are never invented.
 class AnimeDetailsRatings {
   const AnimeDetailsRatings({
     required this.animeId,
@@ -14,6 +17,7 @@ class AnimeDetailsRatings {
     this.malScoringUsers,
     this.malId,
     this.imdbId,
+    this.imdbScore,
     this.isUnaired = false,
     this.reviewsClosed = false,
   });
@@ -25,22 +29,48 @@ class AnimeDetailsRatings {
   final int? malScoringUsers;
   final String? malId;
   final String? imdbId;
+  final double? imdbScore;
   final bool isUnaired;
   final bool reviewsClosed;
 
-  /// APK hides the MAL card when neither `mal_id` nor `imdb_id` is present.
-  /// The score UI also needs `mal_mean`, so the column stays hidden without it.
-  bool get showMalColumn {
-    if (malMean == null) return false;
-    return _hasId(malId) || _hasId(imdbId);
+  /// External score source, matching the APK's MAL -> IMDb fallback.
+  ///
+  /// Prefer a real MAL id + mean. If MAL is unavailable, an IMDb id +
+  /// `imdb_rate` is used. The final MAL branch preserves older AnimeWitcher
+  /// payloads that exposed `mal_mean` alongside only an IMDb id.
+  ExternalRatingSource? get externalSource {
+    if (malMean != null && _hasId(malId)) {
+      return ExternalRatingSource.mal;
+    }
+    if (imdbScore != null && _hasId(imdbId)) {
+      return ExternalRatingSource.imdb;
+    }
+    if (malMean != null && _hasId(imdbId)) {
+      return ExternalRatingSource.mal;
+    }
+    return null;
   }
 
-  /// Displayed MAL scoring-user count. Unaired titles are forced to 0.
+  bool get showExternalColumn => externalSource != null;
+  bool get showMalColumn => externalSource == ExternalRatingSource.mal;
+  bool get showImdbColumn => externalSource == ExternalRatingSource.imdb;
+
+  double? get externalScore => switch (externalSource) {
+    ExternalRatingSource.mal => malMean,
+    ExternalRatingSource.imdb => imdbScore,
+    null => null,
+  };
+
+  /// Displayed MAL scoring-user count. IMDb has no scoring-user field in the
+  /// AnimeWitcher APK model, so no count is invented for the fallback.
   int? get displayedMalScoringUsers {
     if (!showMalColumn) return null;
     if (isUnaired) return 0;
     return malScoringUsers;
   }
+
+  int? get displayedExternalScoringUsers =>
+      showMalColumn ? displayedMalScoringUsers : null;
 
   bool get canRate => !isUnaired && animeId.isNotEmpty;
 
@@ -65,6 +95,9 @@ class AnimeDetailsRatings {
       malScoringUsers: _nonNegativeInt(data['awMalScoringUsers']),
       malId: malId,
       imdbId: imdbId,
+      imdbScore: _positiveScore(
+        data['awImdbScore'] ?? data['imdbRate'] ?? data['imdb_rate'],
+      ),
       isUnaired: _isUnaired(item, data),
       reviewsClosed: _isTruthy(data['awReviewsClosed']),
     );
