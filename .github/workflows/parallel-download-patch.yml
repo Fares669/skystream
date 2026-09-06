@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: adaptive-parallel-download-verify
@@ -152,16 +152,40 @@ jobs:
           exit $status
 
       - name: Upload full Flutter test log
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: full-flutter-test-log
           path: /tmp/full-flutter-test.log
-          if-no-files-found: ignore
+          if-no-files-found: error
 
-      - name: Show final diff summary
+      - name: Promote verified feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          # build_runner currently rewrites this unrelated generated file on CI;
+          # keep the feature PR scoped to download changes only.
+          git restore --source=HEAD -- lib/features/details/presentation/details_controller.g.dart
+
+          # Staging machinery must never appear in the final PR tree.
+          rm -rf .github/parallel_patch
+          rm -f .github/workflows/parallel-download-patch.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+
+          if git diff --cached --quiet; then
+            echo "No verified feature changes to commit" >&2
+            exit 1
+          fi
+
+          git commit -m "feat: add adaptive parallel episode downloads"
+          git push origin HEAD:feat/adaptive-parallel-downloads
+
+      - name: Show final state
         if: always()
         shell: bash
         run: |
           git status --short
-          git diff --stat
+          git log -1 --oneline
