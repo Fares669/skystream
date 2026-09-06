@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'glass_dialog.dart';
+
 /// Pushes [route] on the root navigator so it covers [AppScaffold] and the
 /// bottom taskbar. This is the same stack used by [DetailsRoute] and
 /// [ViewAllRoute], and by More-tab screens.
@@ -22,9 +24,19 @@ Future<T?> showModalOverTaskbar<T>({
     context: context,
     useRootNavigator: true,
     isScrollControlled: isScrollControlled,
-    showDragHandle: showDragHandle,
+    // Drawn inside the glass instead, so the sheet is one surface rather
+    // than a handle with a bordered panel under it.
+    showDragHandle: false,
     isDismissible: isDismissible,
     enableDrag: enableDrag,
-    builder: builder,
+    // The sheet brings its own glass, so the default opaque card would only
+    // paint over it.
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    barrierColor: Colors.black.withValues(alpha: 0.3),
+    builder: (context) => GlassSheetSurface(
+      showHandle: showDragHandle,
+      child: Builder(builder: builder),
+    ),
   );
 }

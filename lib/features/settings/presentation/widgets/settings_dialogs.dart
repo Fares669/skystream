@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../shared/widgets/custom_widgets.dart';
+import '../../../../shared/widgets/glass_dialog.dart';
 import '../../../../core/account/account_providers.dart';
 import '../../../../core/storage/secure_token_storage.dart';
 import '../../../../core/services/external_player_service.dart';
@@ -61,7 +62,7 @@ void showDefaultHomeScreenDialog(
           )
           .toList(growable: false);
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -129,7 +130,7 @@ void showDurationDialog(BuildContext context, WidgetRef ref, int current) {
   final l10n = AppLocalizations.of(context)!;
   final options = <int>[5, 10, 15, 20, 30, 60, 120];
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -171,7 +172,7 @@ void showResizeDialog(BuildContext context, WidgetRef ref, String current) {
     {'label': l10n.zoom, 'value': 'Zoom'},
     {'label': l10n.stretch, 'value': 'Stretch'},
   ];
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -224,7 +225,7 @@ void showDownloadConcurrencyDialog(
     (i) => kDownloadConcurrencyMin + i,
   );
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -270,7 +271,7 @@ String downloadPartsSubtitle(int value) {
 
 void showDownloadPartsDialog(BuildContext context, WidgetRef ref, int current) {
   final selected = normalizeDownloadPartPreference(current);
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -328,7 +329,7 @@ void showDownloadNotificationsDialog(BuildContext context, WidgetRef ref) {
   var prefs = ref.read(generalSettingsProvider).downloadNotifications;
   final l10n = AppLocalizations.of(context)!;
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (context, setState) {
@@ -411,7 +412,7 @@ void showReadaheadDialog(BuildContext context, WidgetRef ref, int current) {
   // 1 to 20 minutes in 1-minute steps
   final options = List.generate(20, (i) => (1 + i) * 60);
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -455,7 +456,7 @@ void showSubtitleDialog(
   double size = settings.subtitleSize;
   bool showBackground = settings.subtitleBackgroundColor != 0;
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (context, setState) {
@@ -522,7 +523,7 @@ void showDefaultPlayerDialog(
   final platformPlayers = ExternalPlayerService.instance
       .getPlayersForPlatform();
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -589,7 +590,7 @@ void showThemeDialog(
   ThemeMode currentTheme,
 ) {
   final l10n = AppLocalizations.of(context)!;
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -646,7 +647,7 @@ void showThemeDialog(
 void showFactoryResetDialog(BuildContext context, WidgetRef ref) {
   final l10n = AppLocalizations.of(context)!;
   final callerContext = context;
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -698,7 +699,7 @@ void showFactoryResetDialog(BuildContext context, WidgetRef ref) {
 void showClearCacheDialog(BuildContext context, WidgetRef ref) {
   final l10n = AppLocalizations.of(context)!;
   final callerContext = context;
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -770,7 +771,7 @@ void showPlayerControlsDialog(BuildContext context, WidgetRef ref) {
     settings.showEpisodes,
   ];
 
-  showDialog<void>(
+  showGlassDialog<void>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (context, setState) {

@@ -1,3 +1,4 @@
+import '../../../../shared/widgets/glass_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,7 +18,7 @@ Future<void> showTaskbarCustomizationDialog(
   var order = normalizeTaskbarOrder(currentOrder).toList(growable: true);
   var hidden = normalizeHiddenTaskbarItems(currentHidden).toSet();
 
-  await showDialog<void>(
+  await showGlassDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) {

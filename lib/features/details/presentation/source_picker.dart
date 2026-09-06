@@ -83,7 +83,6 @@ class _SourcePickerSheetState extends State<_SourcePickerSheet> {
                 ),
               ),
             ),
-            const Divider(height: 1),
             Flexible(
               child: widget.sourcesFuture == null
                   ? _buildSourcesBody(context, widget.sources)

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/layout_constants.dart';
 
 import 'package:animewitcher/core/utils/localized_text.dart';
+import '../../../../shared/widgets/apple_liquid_glass.dart';
+
 class SettingsGroup extends StatelessWidget {
   final String title;
   final List<Widget> children;
@@ -26,18 +28,65 @@ class SettingsGroup extends StatelessWidget {
             ),
           ),
         ),
-        Container(
-          margin: const EdgeInsets.symmetric(
+        Padding(
+          padding: const EdgeInsets.symmetric(
             horizontal: LayoutConstants.spacingMd,
           ),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: Column(children: children),
+          child: SettingsPanel(child: Column(children: children)),
         ),
       ],
+    );
+  }
+}
+
+/// The ground the option panels stand on.
+///
+/// One flat fill at four-tenths opacity vanished into the app's black page:
+/// the rows read as printed straight onto the background rather than sitting
+/// on a panel. A fuller fill, a lit top edge, and a border you can actually
+/// see make the panel a panel again.
+class SettingsPanel extends StatelessWidget {
+  const SettingsPanel({
+    super.key,
+    required this.child,
+    this.radius = 16,
+    this.fill,
+    this.border,
+  });
+
+  final Widget child;
+  final double radius;
+
+  /// Overrides the fill — a hover state or a warning, in practice.
+  final Color? fill;
+  final Color? border;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AppleLiquidGlassSurface(
+      borderRadius: BorderRadius.circular(radius),
+      fallbackColor:
+          fill ?? colors.surfaceContainerHighest.withValues(alpha: 0.82),
+      fallbackBorder: BorderSide(
+        color: border ?? colors.onSurfaceVariant.withValues(alpha: 0.18),
+      ),
+      // A sheen rather than a second colour: it lifts the top edge on the
+      // fallback fill and still reads correctly over Apple's own glass.
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withValues(alpha: 0.07),
+              Colors.white.withValues(alpha: 0.01),
+            ],
+          ),
+        ),
+        child: child,
+      ),
     );
   }
 }
@@ -76,6 +125,7 @@ class _SettingsTileState extends State<SettingsTile> {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Column(
       children: [
         Focus(
@@ -121,17 +171,22 @@ class _SettingsTileState extends State<SettingsTile> {
               child: ListTile(
                 focusColor: Colors.transparent,
                 hoverColor: primary.withValues(alpha: 0.10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: LayoutConstants.spacingMd,
+                  vertical: LayoutConstants.spacingXs,
+                ),
+                // A neutral tile rather than an amber one: with every row
+                // carrying an icon, colouring them all made the accent mean
+                // nothing. It is kept for the controls that act on something.
                 leading:
                     widget.leading ??
                     Container(
-                      padding: const EdgeInsets.all(
-                        LayoutConstants.spacingXs,
-                      ),
+                      padding: const EdgeInsets.all(LayoutConstants.spacingXs),
                       decoration: BoxDecoration(
-                        color: primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: onSurface.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(widget.icon, color: primary, size: 20),
+                      child: Icon(widget.icon, color: onSurface, size: 20),
                     ),
                 title: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -139,7 +194,10 @@ class _SettingsTileState extends State<SettingsTile> {
                     Flexible(
                       child: Text(
                         widget.title,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: onSurface,
+                        ),
                       ),
                     ),
                     if (widget.isBeta) ...[
@@ -168,10 +226,17 @@ class _SettingsTileState extends State<SettingsTile> {
                   ],
                 ),
                 subtitle: widget.subtitle != null
-                    ? Text(
-                        widget.subtitle!,
-                        style: TextStyle(
-                          color: Theme.of(context).textTheme.bodySmall?.color,
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          widget.subtitle!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                height: 1.35,
+                              ),
                         ),
                       )
                     : null,
@@ -189,9 +254,11 @@ class _SettingsTileState extends State<SettingsTile> {
         if (!widget.isLast && !_isFocused)
           Divider(
             height: 1,
-            indent: 56,
-            endIndent: 16,
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.8),
+            indent: LayoutConstants.spacingMd,
+            endIndent: LayoutConstants.spacingMd,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.14),
           ),
       ],
     );
