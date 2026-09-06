@@ -99,12 +99,14 @@ class DetailsCountdownAndStory extends StatelessWidget {
     required this.storyCard,
     this.showCountdown = true,
     this.showRatings = true,
+    this.showRatingsSummary = true,
   });
 
   final MultimediaItem item;
   final Widget storyCard;
   final bool showCountdown;
   final bool showRatings;
+  final bool showRatingsSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +125,7 @@ class DetailsCountdownAndStory extends StatelessWidget {
           const SizedBox(height: 8),
         ],
         if (showRatings) ...[
-          DetailsRatingsRow(item: item),
+          DetailsRatingsRow(item: item, showSummary: showRatingsSummary),
           const SizedBox(height: 8),
         ],
         storyCard,

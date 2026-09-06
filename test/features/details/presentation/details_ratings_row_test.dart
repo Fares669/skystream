@@ -194,6 +194,7 @@ Future<void> _pumpStack(
   required MultimediaItem item,
   _FakeAccountService? service,
   bool showCountdown = true,
+  bool showRatingsSummary = true,
   Key? boundaryKey,
   String? fontFamily,
 }) {
@@ -205,6 +206,7 @@ Future<void> _pumpStack(
       child: DetailsCountdownAndStory(
         item: item,
         showCountdown: showCountdown,
+        showRatingsSummary: showRatingsSummary,
         storyCard: _storyCard(),
       ),
     ),
@@ -368,6 +370,92 @@ void main() {
     expect(star1.left, lessThan(star10.left));
   });
 
+  testWidgets('compact summary puts Witcher left, source right, with one dot', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        service: _FakeAccountService(),
+        child: DetailsRatingsSummary(item: _item(syncData: _ratedSync())),
+      ),
+    );
+
+    final witcher = tester.getRect(
+      find.byKey(kDetailsRatingsCompactWitcherKey),
+    );
+    final external = tester.getRect(
+      find.byKey(kDetailsRatingsCompactExternalKey),
+    );
+    expect(witcher.left, lessThan(external.left));
+    expect(find.text('•'), findsOneWidget);
+
+    final star = tester.getRect(find.byIcon(Icons.star_rounded));
+    final witcherScore = tester.getRect(find.text('9.1'));
+    expect(star.left, lessThan(witcherScore.left));
+
+    final badge = tester.getRect(
+      find.byKey(kDetailsRatingsCompactExternalBadgeKey),
+    );
+    final malScore = tester.getRect(find.text('8.73'));
+    expect(badge.left, lessThan(malScore.left));
+    final badgeWidget = tester.widget<Container>(
+      find.byKey(kDetailsRatingsCompactExternalBadgeKey),
+    );
+    expect((badgeWidget.decoration as BoxDecoration).color, kMalBadgeBlue);
+  });
+
+  testWidgets('mobile actions-only rating card hides score columns', (tester) async {
+    await _pumpStack(
+      tester,
+      item: _item(syncData: _ratedSync()),
+      showCountdown: false,
+      showRatingsSummary: false,
+    );
+
+    expect(find.byKey(kDetailsRatingsWitcherKey), findsNothing);
+    expect(find.byKey(kDetailsRatingsMalKey), findsNothing);
+    expect(find.byKey(kDetailsRatingsRateButtonKey), findsOneWidget);
+    expect(find.byKey(kDetailsRatingsReviewsButtonKey), findsOneWidget);
+  });
+
+  testWidgets('compact summary uses the IMDb badge on the right', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        service: _FakeAccountService(),
+        child: DetailsRatingsSummary(
+          item: _item(
+            imdbId: 'tt0283754',
+            syncData: const <String, String>{
+              'awScore': '8.37',
+              'awImdbId': 'tt0283754',
+              'awImdbScore': '7.4',
+            },
+          ),
+        ),
+      ),
+    );
+
+    final witcher = tester.getRect(
+      find.byKey(kDetailsRatingsCompactWitcherKey),
+    );
+    final external = tester.getRect(
+      find.byKey(kDetailsRatingsCompactExternalKey),
+    );
+    expect(witcher.left, lessThan(external.left));
+    expect(find.text('IMDb'), findsOneWidget);
+    final badgeWidget = tester.widget<Container>(
+      find.byKey(kDetailsRatingsCompactExternalBadgeKey),
+    );
+    expect((badgeWidget.decoration as BoxDecoration).color, kImdbBadgeYellow);
+    final badge = tester.getRect(
+      find.byKey(kDetailsRatingsCompactExternalBadgeKey),
+    );
+    final score = tester.getRect(find.text('7.4'));
+    expect(badge.left, lessThan(score.left));
+  });
+
   testWidgets('shows IMDb fallback when MAL is unavailable', (tester) async {
     await _pumpStack(
       tester,
@@ -516,6 +604,7 @@ void main() {
       showCountdown: false,
     );
     await tester.pump();
+    expect(find.text('4/10'), findsOneWidget);
     await tester.tap(find.byKey(kDetailsRatingsRateButtonKey));
     await tester.pumpAndSettle();
     expect(find.text('4 /10'), findsOneWidget);
@@ -534,6 +623,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(service.writes, contains('test-anime:10'));
     expect(service.userRating, 10);
+    expect(find.text('10/10'), findsOneWidget);
     final rateIcon = tester.widget<Icon>(
       find.descendant(
         of: find.byKey(kDetailsRatingsRateButtonKey),
