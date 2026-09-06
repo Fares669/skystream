@@ -25,6 +25,7 @@ import 'package:animewitcher/core/router/app_router.dart';
 
 import '../../../shared/widgets/custom_widgets.dart';
 import '../../../shared/widgets/shimmer_placeholder.dart';
+import '../../../shared/widgets/anime_catalog_shimmer.dart';
 import '../../../shared/widgets/multimedia_card.dart';
 import '../../../shared/widgets/apple_liquid_glass.dart';
 import '../../../shared/widgets/recoverable_network_state.dart';
@@ -88,7 +89,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (showFade != _showBottomFade.value) {
       _showBottomFade.value = showFade;
     }
-
   }
 
   @override
@@ -473,14 +473,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       isPortrait: true,
       isDesktop: isDesktop,
     );
-    final captionExtent = MultimediaCardLayout.animeCaptionExtent(context);
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title Placeholder
           Padding(
             padding: EdgeInsets.fromLTRB(
               isDesktop
@@ -492,14 +490,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   : LayoutConstants.spacingMd,
               LayoutConstants.spacingSm,
             ),
-            child: ShimmerPlaceholder.rectangular(
-              width: 150,
-              height: 24,
-              borderRadius: 4,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: ShimmerPlaceholder.rectangular(
+                      width: 150,
+                      height: 24,
+                      borderRadius: 4,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: LayoutConstants.spacingMd),
+                ShimmerPlaceholder.rectangular(
+                  width: 84,
+                  height: 30,
+                  borderRadius: 20,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: LayoutConstants.spacingMd),
-          // List Placeholder
           SizedBox(
             height: listHeight,
             child: ListView.separated(
@@ -515,18 +527,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 return SizedBox(
                   width: cardWidth,
                   height: listHeight,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: ShimmerPlaceholder.rectangular(
-                          width: cardWidth,
-                          borderRadius: MultimediaCardLayout.posterRadius,
-                        ),
-                      ),
-                      SizedBox(height: captionExtent),
-                    ],
-                  ),
+                  child: const AnimePosterShimmer(),
                 );
               },
             ),
