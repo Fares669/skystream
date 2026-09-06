@@ -17,6 +17,7 @@ import '../details_controller.dart';
 import 'package:animewitcher/core/extensions/extension_manager.dart';
 
 import 'episode_card.dart';
+import 'episode_search.dart';
 import 'episode_view_mode.dart';
 import 'details_hero_actions.dart';
 import 'package:animewitcher/shared/widgets/apple_liquid_glass.dart';
@@ -905,11 +906,35 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
           .toList(growable: false);
     }
 
-    final displayedEpisodes = episodesInDisplayOrder(
+    final orderedEpisodes = episodesInDisplayOrder(
       episodes,
       ascending: detailsState.isAscending,
     );
 
+    return ValueListenableBuilder<String>(
+      valueListenable: episodeSearchQuery,
+      builder: (context, query, _) {
+        final displayedEpisodes = query.trim().isEmpty
+            ? orderedEpisodes
+            : orderedEpisodes
+                  .where(
+                    (episode) => episodeMatchesQuery(
+                      number: episode.episode,
+                      name: episode.name,
+                      query: query,
+                    ),
+                  )
+                  .toList(growable: false);
+        return _buildEpisodesSection(context, displayedEpisodes, query);
+      },
+    );
+  }
+
+  Widget _buildEpisodesSection(
+    BuildContext context,
+    List<Episode> displayedEpisodes,
+    String query,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -932,6 +957,7 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
                 runSpacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  const EpisodeSearchButton(),
                   const EpisodeViewModeToggle(),
                   DetailsEpisodeFilterBar(itemUrl: itemUrl),
                 ],
@@ -939,108 +965,125 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
             ],
           ),
         ),
-        ValueListenableBuilder<EpisodeViewMode>(
-          valueListenable: episodeViewMode,
-          builder: (context, mode, _) {
-            if (mode == EpisodeViewMode.rail) {
-              // One row to flick along. Lazy by construction, so the length
-              // of the series costs nothing here.
-              // A rail rather than a bare horizontal list: a mouse cannot
-              // drag one of those, and a wheel over it scrolls the page
-              // behind instead — so the row could be seen and not moved.
-              // This is the same rail the home screen rows use, drag and all.
-              return SizedBox(
-                height: 268,
-                child: PagedRail(
-                  itemExtent: 316,
-                  itemCount: displayedEpisodes.length,
-                  padding: EdgeInsets.zero,
-                  itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: SizedBox(
-                      width: 300,
-                      child: EpisodeCard(
-                        key: ValueKey(displayedEpisodes[index].url),
-                        episode: displayedEpisodes[index],
-                        parentItem: parentItem,
-                        vertical: true,
-                        plain: true,
-                        showDescription: false,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                // One card to a row reads as a list; several reads as a wall
-                // of artwork. The same card either way, given more or less
-                // room to lay itself out in.
-                final crossAxisCount = mode == EpisodeViewMode.list
-                    ? 1
-                    : (constraints.maxWidth / 330).ceil().clamp(1, 6);
-                final rowCount = (displayedEpisodes.length / crossAxisCount)
-                    .ceil();
-
-                // Short and ordinary runs flow into the page, so the whole
-                // thing scrolls as one. A very long one keeps a viewport of
-                // its own: a thousand-episode series would otherwise build a
-                // thousand cards to show a dozen.
-                const flowLimit = 80;
-                if (displayedEpisodes.length <= flowLimit) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: rowIndex == rowCount - 1 ? 0 : 16,
-                          ),
-                          child: _buildEpisodeRow(
-                            displayedEpisodes,
-                            rowIndex,
-                            crossAxisCount,
-                            plain: true,
-                            vertical: mode == EpisodeViewMode.grid,
-                          ),
-                        ),
-                    ],
-                  );
-                }
-
-                final viewportHeight = MediaQuery.sizeOf(context).height;
-                final availableHeight = (viewportHeight - 160)
-                    .clamp(220.0, 820.0)
-                    .toDouble();
-                final maximumHeight = (viewportHeight * 0.72)
-                    .clamp(220.0, availableHeight)
-                    .toDouble();
-
+        if (displayedEpisodes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: LayoutConstants.spacingLg,
+            ),
+            child: Text(
+              appText(
+                context,
+                english: 'No episode matches "$query"',
+                arabic: 'لا توجد حلقة تطابق "$query"',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else
+          ValueListenableBuilder<EpisodeViewMode>(
+            valueListenable: episodeViewMode,
+            builder: (context, mode, _) {
+              if (mode == EpisodeViewMode.rail) {
+                // One row to flick along. Lazy by construction, so the length
+                // of the series costs nothing here.
+                // A rail rather than a bare horizontal list: a mouse cannot
+                // drag one of those, and a wheel over it scrolls the page
+                // behind instead — so the row could be seen and not moved.
+                // This is the same rail the home screen rows use, drag and all.
                 return SizedBox(
-                  height: maximumHeight,
-                  child: Scrollbar(
-                    child: ListView.separated(
-                      primary: false,
-                      padding: EdgeInsets.zero,
-                      scrollCacheExtent: const ScrollCacheExtent.pixels(700),
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemCount: rowCount,
-                      separatorBuilder: (_, _) => const SizedBox(height: 16),
-                      itemBuilder: (context, rowIndex) => _buildEpisodeRow(
-                        displayedEpisodes,
-                        rowIndex,
-                        crossAxisCount,
+                  height: 268,
+                  child: PagedRail(
+                    itemExtent: 316,
+                    itemCount: displayedEpisodes.length,
+                    padding: EdgeInsets.zero,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: SizedBox(
+                        width: 300,
+                        child: EpisodeCard(
+                          key: ValueKey(displayedEpisodes[index].url),
+                          episode: displayedEpisodes[index],
+                          parentItem: parentItem,
+                          vertical: true,
+                          plain: true,
+                          showDescription: false,
+                        ),
                       ),
                     ),
                   ),
                 );
-              },
-            );
-          },
-        ),
+              }
+
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  // One card to a row reads as a list; several reads as a wall
+                  // of artwork. The same card either way, given more or less
+                  // room to lay itself out in.
+                  final crossAxisCount = mode == EpisodeViewMode.list
+                      ? 1
+                      : (constraints.maxWidth / 330).ceil().clamp(1, 6);
+                  final rowCount = (displayedEpisodes.length / crossAxisCount)
+                      .ceil();
+
+                  // Short and ordinary runs flow into the page, so the whole
+                  // thing scrolls as one. A very long one keeps a viewport of
+                  // its own: a thousand-episode series would otherwise build a
+                  // thousand cards to show a dozen.
+                  const flowLimit = 80;
+                  if (displayedEpisodes.length <= flowLimit) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: rowIndex == rowCount - 1 ? 0 : 16,
+                            ),
+                            child: _buildEpisodeRow(
+                              displayedEpisodes,
+                              rowIndex,
+                              crossAxisCount,
+                              plain: true,
+                              vertical: mode == EpisodeViewMode.grid,
+                            ),
+                          ),
+                      ],
+                    );
+                  }
+
+                  final viewportHeight = MediaQuery.sizeOf(context).height;
+                  final availableHeight = (viewportHeight - 160)
+                      .clamp(220.0, 820.0)
+                      .toDouble();
+                  final maximumHeight = (viewportHeight * 0.72)
+                      .clamp(220.0, availableHeight)
+                      .toDouble();
+
+                  return SizedBox(
+                    height: maximumHeight,
+                    child: Scrollbar(
+                      child: ListView.separated(
+                        primary: false,
+                        padding: EdgeInsets.zero,
+                        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: rowCount,
+                        separatorBuilder: (_, _) => const SizedBox(height: 16),
+                        itemBuilder: (context, rowIndex) => _buildEpisodeRow(
+                          displayedEpisodes,
+                          rowIndex,
+                          crossAxisCount,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
       ],
     );
   }

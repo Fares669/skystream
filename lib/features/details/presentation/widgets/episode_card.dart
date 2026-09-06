@@ -13,6 +13,7 @@ import 'package:animewitcher/features/comments/presentation/animewitcher_comment
 import 'package:animewitcher/core/storage/history_repository.dart';
 import 'package:animewitcher/core/storage/episode_watch_repository.dart';
 import 'package:animewitcher/core/services/download_service.dart';
+import 'package:animewitcher/core/utils/localized_text.dart';
 import 'package:animewitcher/core/utils/artwork_quality.dart';
 import 'package:animewitcher/core/utils/episode_label.dart';
 import 'package:animewitcher/core/utils/image_fallbacks.dart';
@@ -23,6 +24,7 @@ import '../../../library/presentation/history_provider.dart';
 import '../details_controller.dart';
 import '../download_launcher.dart';
 import '../downloaded_file_provider.dart';
+import 'episode_action_chip.dart';
 import 'download_progress_dialog.dart';
 import 'download_management_dialog.dart';
 import '../../../../l10n/generated/app_localizations.dart';
@@ -511,18 +513,12 @@ class EpisodeCard extends HookConsumerWidget {
         : null;
     if (commentsTarget == null) return downloadAction;
 
-    final commentsButton = IconButton(
+    final commentsButton = EpisodeActionChip(
       tooltip:
           Localizations.localeOf(context).languageCode.toLowerCase() == 'ar'
           ? 'تعليقات الحلقة'
           : 'Episode comments',
-      icon: Icon(
-        Icons.chat_bubble_outline_rounded,
-        size: 27,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      icon: Icons.forum_outlined,
       onPressed: () {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -536,7 +532,7 @@ class EpisodeCard extends HookConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         downloadAction,
-        const SizedBox(height: 2),
+        const SizedBox(height: 8),
         ExcludeFocus(child: commentsButton),
       ],
     );
@@ -552,14 +548,10 @@ class EpisodeCard extends HookConsumerWidget {
     MultimediaItem? details,
   ) {
     if (downloadedFile != null) {
-      return IconButton(
-        icon: const Icon(
-          Icons.download_done_sharp,
-          color: Colors.green,
-          size: 32,
-        ),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
+      return EpisodeActionChip(
+        tooltip: appText(context, english: 'Downloaded', arabic: 'تم التنزيل'),
+        icon: Icons.download_done_rounded,
+        color: const Color(0xFF4CAF50),
         onPressed: () {
           DownloadManagementDialog.show(
             context,
@@ -570,52 +562,51 @@ class EpisodeCard extends HookConsumerWidget {
         },
       );
     } else if (isDownloading) {
-      return SizedBox(
-        width: 32,
-        height: 32,
-        child: InkWell(
-          onTap: () => DownloadProgressDialog.show(
-            context,
-            _downloadDialogTitle(parentItem, episode),
-            episode.url,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(4.0),
-            child: downloadProgressData?.status == TaskStatus.paused
-                ? Icon(
-                    Icons.pause_rounded,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  )
-                : Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CircularProgressIndicator(
-                        value: downloadProgress > 0 ? downloadProgress : null,
-                        strokeWidth: 2,
+      return EpisodeActionChip(
+        tooltip: appText(
+          context,
+          english: 'Downloading',
+          arabic: 'جارٍ التنزيل',
+        ),
+        onPressed: () => DownloadProgressDialog.show(
+          context,
+          _downloadDialogTitle(parentItem, episode),
+          episode.url,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(4.0),
+          child: downloadProgressData?.status == TaskStatus.paused
+              ? Icon(
+                  Icons.pause_rounded,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                )
+              : Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: downloadProgress > 0 ? downloadProgress : null,
+                      strokeWidth: 2,
+                    ),
+                    Text(
+                      "${(downloadProgress * 100).toInt()}%", // Display the percentage
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
-                      Text(
-                        "${(downloadProgress * 100).toInt()}%", // Display the percentage
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
+                    ),
+                  ],
+                ),
         ),
       );
     } else {
-      return IconButton(
-        icon: Icon(
-          Icons.file_download_outlined,
-          size: 32,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+      return EpisodeActionChip(
+        tooltip: appText(
+          context,
+          english: 'Download episode',
+          arabic: 'تنزيل الحلقة',
         ),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
+        icon: Icons.save_alt_rounded,
         onPressed: () {
           ref
               .read(downloadLauncherProvider)

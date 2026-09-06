@@ -49,6 +49,7 @@ import 'package:animewitcher/l10n/generated/app_localizations.dart';
 import 'package:animewitcher/core/utils/localized_text.dart';
 import 'package:animewitcher/core/services/notification_service.dart';
 import 'widgets/details_hero_actions.dart';
+import 'widgets/episode_search.dart';
 import 'widgets/next_airing_chip.dart';
 import 'widgets/details_comments_preview.dart';
 import 'details_ratings.dart';
@@ -943,6 +944,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
   @override
   void initState() {
     super.initState();
+    // A number typed on one series means nothing on the next: arriving at an
+    // anime already filtered down to four episodes reads as a broken list.
+    episodeSearchQuery.value = '';
     _detailsTabController = TabController(
       length: 2,
       vsync: this,
