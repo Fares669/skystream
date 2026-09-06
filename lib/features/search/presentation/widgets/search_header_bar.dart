@@ -106,7 +106,9 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                                   height: 22,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: theme.colorScheme.surfaceContainerHighest
+                                    color: theme
+                                        .colorScheme
+                                        .surfaceContainerHighest
                                         .withValues(alpha: 0.7),
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
@@ -154,17 +156,19 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                                           ? theme.colorScheme.primary
                                           : (isDark
                                                 ? Colors.white70
-                                                : theme.colorScheme.onSurfaceVariant),
+                                                : theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant),
                                     ),
                                     style: IconButton.styleFrom(
                                       backgroundColor: isFocused
-                                          ? theme.colorScheme.primary.withValues(
-                                              alpha: 0.15,
-                                            )
+                                          ? theme.colorScheme.primary
+                                                .withValues(alpha: 0.15)
                                           : Colors.transparent,
                                       minimumSize: const Size(32, 32),
                                       padding: EdgeInsets.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     onPressed: () {
                                       widget.textController.clear();
@@ -174,7 +178,9 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                                                 .notifier,
                                           )
                                           .clear();
-                                      ref.read(searchQueryProvider.notifier).set('');
+                                      ref
+                                          .read(searchQueryProvider.notifier)
+                                          .set('');
                                       widget.searchFocusNode.requestFocus();
                                     },
                                   );
@@ -204,9 +210,10 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                                 enableInteractiveSelection: true,
                                 contextMenuBuilder: (context, editableTextState) {
                                   return AdaptiveTextSelectionToolbar.buttonItems(
-                                    anchors: editableTextState.contextMenuAnchors,
-                                    buttonItems:
-                                        editableTextState.contextMenuButtonItems,
+                                    anchors:
+                                        editableTextState.contextMenuAnchors,
+                                    buttonItems: editableTextState
+                                        .contextMenuButtonItems,
                                   );
                                 },
                                 onChanged: widget.onChanged,
@@ -259,9 +266,14 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                       sortIcon: widget.sortIcon,
                       sortSystemImage: widget.sortSystemImage,
                       sortTooltip: widget.sortTooltip,
-                      filterTooltip: appText(context, english: 'Filters', arabic: 'الفلاتر'),
+                      filterTooltip: appText(
+                        context,
+                        english: 'Filters',
+                        arabic: 'الفلاتر',
+                      ),
                       onFilterPressed: widget.onShowFilters,
-                      tintColor: theme.colorScheme.primary,
+                      // Neutral, like the glyphs it sits beside.
+                      tintColor: theme.colorScheme.onSurfaceVariant,
                       height: SearchGlassSurface.height,
                     ),
                   ],
