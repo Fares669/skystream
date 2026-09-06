@@ -3059,7 +3059,12 @@ class AnimeWitcherNativeProvider extends AnimeWitcherProvider {
     final malId = _malId(source);
     final poster = _posterFromHit(source);
     final providerCover = _coverFromHit(source);
-    final banner = providerCover.isNotEmpty ? providerCover : poster;
+    // The same full-size ask the catalog's own hero makes: this URL carries a
+    // thumbnail-sized rendition directive, and a details page draws it the
+    // width of the window.
+    final banner = providerCover.isNotEmpty
+        ? storyblokAtStoredWidth(providerCover, maxWidth: storyblokBannerWidth)
+        : poster;
     final syncData = <String, String>{};
     void putSync(String key, dynamic raw) {
       final value = _text(raw);

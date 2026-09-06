@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../../../../core/utils/artwork_quality.dart';
+import '../../../../core/utils/storyblok_image.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../../shared/widgets/fallback_poster_image.dart';
 import '../../../../shared/widgets/cards_wrapper.dart';
@@ -572,9 +573,12 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
     // Prefer the anime banner explicitly for hero cards. Fall back to the
     // poster only when a provider does not expose a banner.
     final banner = movie.bannerUrl?.trim();
+    // Asked for at the size it was uploaded at. The catalog's URLs carry a
+    // rendition directive — often 576px wide — which is invisible on a card
+    // and plain on a banner drawn the width of the window.
     final imageUrl = banner == null || banner.isEmpty
         ? movie.posterImageUrl
-        : banner;
+        : storyblokAtStoredWidth(banner, maxWidth: storyblokBannerWidth);
     final title = movie.title;
 
     // The details-page banner is painted directly into its frame with no

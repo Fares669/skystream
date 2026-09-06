@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/utils/artwork_quality.dart';
+import '../../../../core/utils/storyblok_image.dart';
 import '../../../../core/utils/image_fallbacks.dart';
 import '../../../../shared/widgets/thumbnail_error_placeholder.dart';
 import '../../../../shared/widgets/fallback_poster_image.dart';
@@ -94,6 +95,8 @@ class DetailsDesktopHero extends ConsumerWidget {
       displayItem.posterUrl,
       label: displayItem.title,
     );
+    // Asked for at its stored size; the catalog's own URL requests a
+    // thumbnail-sized copy of it.
     final backdropUrl =
         AppImageFallbacks.banner(
           bannerUrl: displayItem.bannerUrl,
@@ -101,6 +104,10 @@ class DetailsDesktopHero extends ConsumerWidget {
           label: displayItem.title,
         ) ??
         '';
+    final backdrop = storyblokAtStoredWidth(
+      backdropUrl,
+      maxWidth: storyblokBannerWidth,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -130,7 +137,7 @@ class DetailsDesktopHero extends ConsumerWidget {
                         paintedWidth: MediaQuery.sizeOf(context).width,
                         builder: (BuildContext context, int? decodeWidth) =>
                             FallbackPosterImage(
-                              imageUrl: backdropUrl,
+                              imageUrl: backdrop,
                               // Wide art, looked up the way Harbor does when
                               // the catalog has none and the viewer asked for
                               // other sources: AniList's banner, then what
