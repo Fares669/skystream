@@ -6,6 +6,13 @@ import 'package:flutter/services.dart';
 import 'download_concurrency.dart';
 
 typedef SystemDownloadCancellation = Future<void> Function(String taskId);
+typedef SystemDownloadChunkUpdate =
+    void Function({
+      required String parentTaskId,
+      required String chunkTaskId,
+      double? progress,
+      int? statusOrdinal,
+    });
 
 /// Bridges AnimeWitcher downloads to iOS 26's system-managed continued
 /// processing task UI. On older iOS versions the native side returns false
@@ -20,9 +27,13 @@ class DownloadContinuedProcessingService {
   );
 
   final SystemDownloadCancellation onSystemCancel;
+  final SystemDownloadChunkUpdate? onChunkUpdate;
   bool _handlerInstalled = false;
 
-  DownloadContinuedProcessingService({required this.onSystemCancel}) {
+  DownloadContinuedProcessingService({
+    required this.onSystemCancel,
+    this.onChunkUpdate,
+  }) {
     if (_isAvailable) {
       _channel.setMethodCallHandler(_handleNativeCall);
       _handlerInstalled = true;
@@ -141,11 +152,30 @@ class DownloadContinuedProcessingService {
   }
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
-    if (call.method != 'cancel') return false;
-
     final arguments = call.arguments;
     if (arguments is! Map) return false;
 
+    if (call.method == 'chunkUpdate') {
+      final parentTaskId = arguments['parentTaskId'];
+      final chunkTaskId = arguments['chunkTaskId'];
+      if (parentTaskId is! String ||
+          parentTaskId.isEmpty ||
+          chunkTaskId is! String ||
+          chunkTaskId.isEmpty) {
+        return false;
+      }
+      final rawProgress = arguments['progress'];
+      final rawStatus = arguments['status'];
+      onChunkUpdate?.call(
+        parentTaskId: parentTaskId,
+        chunkTaskId: chunkTaskId,
+        progress: rawProgress is num ? rawProgress.toDouble() : null,
+        statusOrdinal: rawStatus is num ? rawStatus.toInt() : null,
+      );
+      return true;
+    }
+
+    if (call.method != 'cancel') return false;
     final taskId = arguments['taskId'];
     if (taskId is! String || taskId.isEmpty) return false;
 

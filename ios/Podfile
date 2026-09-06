@@ -36,7 +36,66 @@ target 'Runner' do
   end
 end
 
+
+def patch_background_downloader_chunk_updates
+  plugin_file = File.expand_path(
+    File.join(
+      '.symlinks', 'plugins', 'background_downloader', 'ios',
+      'background_downloader', 'Sources', 'background_downloader',
+      'ParallelDownloader.swift'
+    ),
+    __dir__
+  )
+  unless File.exist?(plugin_file)
+    raise "[AnimeWitcher] background_downloader ParallelDownloader.swift not found: #{plugin_file}"
+  end
+
+  source = File.read(plugin_file)
+  marker = 'AnimeWitcherBackgroundDownloaderChunkUpdate'
+  return if source.include?(marker)
+
+  status_needle = "    func chunkStatusUpdate(chunkTaskId: String, status: TaskStatus, taskException: TaskException?, responseBody: String?) {\n        // Confirm chunk is part of this parent task\n        guard let chunk = chunks.first(where: { $0.task.taskId == chunkTaskId }) else { return }\n"
+  status_instrumentation = <<~'SWIFT'
+        NotificationCenter.default.post(
+            name: Notification.Name("AnimeWitcherBackgroundDownloaderChunkUpdate"),
+            object: nil,
+            userInfo: [
+                "parentTaskId": parentTask.taskId,
+                "chunkTaskId": chunkTaskId,
+                "status": status.rawValue
+            ]
+        )
+  SWIFT
+  unless source.include?(status_needle)
+    raise '[AnimeWitcher] background_downloader chunkStatusUpdate marker changed; update the integration patch'
+  end
+  source.sub!(status_needle, status_needle + status_instrumentation)
+
+  progress_needle = "    func chunkProgressUpdate(chunkTaskId: String, progress: Double) {\n        guard let chunk = chunks.first(where: { $0.task.taskId == chunkTaskId }) else {\n            return  // chunk is not part of this parent task\n        }\n"
+  progress_instrumentation = <<~'SWIFT'
+        if progress >= 0 && progress <= 1 {
+            NotificationCenter.default.post(
+                name: Notification.Name("AnimeWitcherBackgroundDownloaderChunkUpdate"),
+                object: nil,
+                userInfo: [
+                    "parentTaskId": parentTask.taskId,
+                    "chunkTaskId": chunkTaskId,
+                    "progress": progress
+                ]
+            )
+        }
+  SWIFT
+  unless source.include?(progress_needle)
+    raise '[AnimeWitcher] background_downloader chunkProgressUpdate marker changed; update the integration patch'
+  end
+  source.sub!(progress_needle, progress_needle + progress_instrumentation)
+
+  File.write(plugin_file, source)
+  Pod::UI.puts '[AnimeWitcher] Enabled real ParallelDownloadTask child progress telemetry'
+end
+
 post_install do |installer|
+  patch_background_downloader_chunk_updates
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end

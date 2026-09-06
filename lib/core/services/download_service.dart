@@ -85,6 +85,35 @@ class DownloadProgressNotifier extends _$DownloadProgressNotifier {
 }
 
 @Riverpod(keepAlive: true)
+class DownloadChunkProgress extends _$DownloadChunkProgress {
+  @override
+  Map<String, Map<String, double>> build() => {};
+
+  void update({
+    required String parentTaskId,
+    required String chunkTaskId,
+    double? progress,
+    int? statusOrdinal,
+  }) {
+    final chunks = Map<String, double>.from(
+      state[parentTaskId] ?? const <String, double>{},
+    );
+    if (progress != null && progress >= 0 && progress <= 1) {
+      chunks[chunkTaskId] = progress.clamp(0.0, 1.0).toDouble();
+    }
+    if (statusOrdinal == TaskStatus.complete.index) {
+      chunks[chunkTaskId] = 1.0;
+    }
+    state = {...state, parentTaskId: chunks};
+  }
+
+  void remove(String parentTaskId) {
+    if (!state.containsKey(parentTaskId)) return;
+    state = {...state}..remove(parentTaskId);
+  }
+}
+
+@Riverpod(keepAlive: true)
 class ActiveDownloadsNotifier extends _$ActiveDownloadsNotifier {
   @override
   Set<String> build() => {};
@@ -123,10 +152,27 @@ class DownloadService {
   DownloadService(this._ref) : _dio = _ref.read(dioClientProvider) {
     _continuedProcessing = DownloadContinuedProcessingService(
       onSystemCancel: _cancelFromSystemUI,
+      onChunkUpdate: _handleNativeChunkUpdate,
     );
   }
 
   Stream<TaskUpdate> get updates => _updatesController.stream;
+
+  void _handleNativeChunkUpdate({
+    required String parentTaskId,
+    required String chunkTaskId,
+    double? progress,
+    int? statusOrdinal,
+  }) {
+    _ref
+        .read(downloadChunkProgressProvider.notifier)
+        .update(
+          parentTaskId: parentTaskId,
+          chunkTaskId: chunkTaskId,
+          progress: progress,
+          statusOrdinal: statusOrdinal,
+        );
+  }
 
   void dispose() {
     _updatesSubscription?.cancel();
