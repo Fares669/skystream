@@ -12,17 +12,21 @@ class _TestStorageService extends StorageService {
   bool isEpisodeImagesFromAniZipEnabled() => false;
 }
 
-Map<String, dynamic> _stringField(String value) =>
-    <String, dynamic>{'stringValue': value};
+Map<String, dynamic> _stringField(String value) => <String, dynamic>{
+  'stringValue': value,
+};
 
-Map<String, dynamic> _doubleField(double value) =>
-    <String, dynamic>{'doubleValue': value};
+Map<String, dynamic> _doubleField(double value) => <String, dynamic>{
+  'doubleValue': value,
+};
 
-Map<String, dynamic> _intField(int value) =>
-    <String, dynamic>{'integerValue': '$value'};
+Map<String, dynamic> _intField(int value) => <String, dynamic>{
+  'integerValue': '$value',
+};
 
-Map<String, dynamic> _boolField(bool value) =>
-    <String, dynamic>{'booleanValue': value};
+Map<String, dynamic> _boolField(bool value) => <String, dynamic>{
+  'booleanValue': value,
+};
 
 Map<String, dynamic> _mapField(Map<String, dynamic> fields) =>
     <String, dynamic>{
@@ -69,6 +73,7 @@ void main() {
         'details': _mapField(<String, dynamic>{
           'mal_mean': _doubleField(8.73),
           'mal_num_scoring_users': _intField(668508),
+          'imdb_rate': _doubleField(7.8),
           'state': _stringField('مستمر'),
         }),
       }),
@@ -81,6 +86,7 @@ void main() {
     expect(item.syncData?['awMalScore'], '8.73');
     expect(item.syncData?['awMalScoringUsers'], '668508');
     expect(item.syncData?['awImdbId'], 'tt0409591');
+    expect(item.syncData?['awImdbScore'], '7.8');
     expect(item.imdbId, 'tt0409591');
     expect(item.syncData?['awScore'], isNot('1.23'));
   });
@@ -90,9 +96,7 @@ void main() {
       _stubDio(<String, dynamic>{
         'name': _stringField('Rated Show'),
         'average_rate': _doubleField(9.9),
-        'rating': _mapField(<String, dynamic>{
-          'rate': _doubleField(7.5),
-        }),
+        'rating': _mapField(<String, dynamic>{'rate': _doubleField(7.5)}),
         'details': _mapField(<String, dynamic>{
           'state': _stringField('لم يتم بثه بعد'),
         }),
@@ -104,6 +108,26 @@ void main() {
     expect(item.syncData?['awScore'], '7.5');
     expect(item.syncData?.containsKey('awScoreCount'), isFalse);
     expect(item.syncData?['awState'], 'لم يتم بثه بعد');
+  });
+
+  test('maps IMDb score for animation details without MAL', () async {
+    final provider = AnimeWitcherNativeProvider(
+      _stubDio(<String, dynamic>{
+        'name': _stringField('The Legend of Tarzan'),
+        'imdb_id': _stringField('tt0283754'),
+        'rating': _mapField(<String, dynamic>{'rate': _doubleField(8.37)}),
+        'details': _mapField(<String, dynamic>{
+          'imdb_rate': _doubleField(7.4),
+          'state': _stringField('مكتمل'),
+        }),
+      }),
+      SettingsRepository(_TestStorageService()),
+    );
+
+    final item = await provider.getDetails(url);
+    expect(item.syncData?['awMalScore'], isNull);
+    expect(item.syncData?['awImdbId'], 'tt0283754');
+    expect(item.syncData?['awImdbScore'], '7.4');
   });
 
   test('maps reviews_closed from the anime document', () async {

@@ -29,9 +29,9 @@ class _FakeAccountService extends AnimeWitcherAccountService {
     this.userRating,
     this.reviewsClosedLive = false,
   }) : super(
-          storage: StorageService(),
-          secureStorage: SecureTokenStorage(StorageService()),
-        );
+         storage: StorageService(),
+         secureStorage: SecureTokenStorage(StorageService()),
+       );
 
   final bool signedIn;
   int? userRating;
@@ -44,15 +44,15 @@ class _FakeAccountService extends AnimeWitcherAccountService {
 
   @override
   AnimeWitcherAccountSnapshot get snapshot => AnimeWitcherAccountSnapshot(
-        profile: signedIn
-            ? const AnimeWitcherProfile(
-                documentId: 'user-doc',
-                uid: 'uid-1',
-                signInMethod: AnimeWitcherSignInMethod.google,
-                userName: 'Me',
-              )
-            : null,
-      );
+    profile: signedIn
+        ? const AnimeWitcherProfile(
+            documentId: 'user-doc',
+            uid: 'uid-1',
+            signInMethod: AnimeWitcherSignInMethod.google,
+            userName: 'Me',
+          )
+        : null,
+  );
 
   @override
   Future<int?> loadAnimeUserRating(String animeId) async => userRating;
@@ -321,7 +321,9 @@ void main() {
     final malStar = tester.getRect(find.byKey(kDetailsRatingsMalStarKey));
     final malScore = tester.getRect(find.text('8.73'));
     expect(malStar.left, lessThan(malScore.left));
-    final badge = tester.widget<Container>(find.byKey(kDetailsRatingsMalBadgeKey));
+    final badge = tester.widget<Container>(
+      find.byKey(kDetailsRatingsMalBadgeKey),
+    );
     expect((badge.decoration as BoxDecoration).color, kMalBadgeBlue);
     final malLabel = tester.widget<Text>(
       find.descendant(
@@ -366,14 +368,45 @@ void main() {
     expect(star1.left, lessThan(star10.left));
   });
 
+  testWidgets('shows IMDb fallback when MAL is unavailable', (tester) async {
+    await _pumpStack(
+      tester,
+      item: _item(
+        imdbId: 'tt0283754',
+        syncData: const <String, String>{
+          'awScore': '8.37',
+          'awImdbId': 'tt0283754',
+          'awImdbScore': '7.4',
+        },
+      ),
+      showCountdown: false,
+    );
+
+    expect(find.byKey(kDetailsRatingsMalKey), findsNothing);
+    expect(find.byKey(kDetailsRatingsImdbKey), findsOneWidget);
+    expect(find.text('IMDb'), findsOneWidget);
+    expect(find.text('7.4'), findsOneWidget);
+    expect(find.text('IMDb Score'), findsOneWidget);
+    final badge = tester.widget<Container>(
+      find.byKey(kDetailsRatingsImdbBadgeKey),
+    );
+    expect((badge.decoration as BoxDecoration).color, kImdbBadgeYellow);
+    final label = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(kDetailsRatingsImdbBadgeKey),
+        matching: find.text('IMDb'),
+      ),
+    );
+    expect(label.style?.color, Colors.black);
+    final star = tester.widget<Icon>(find.byKey(kDetailsRatingsImdbStarKey));
+    expect(star.color, kImdbBadgeYellow);
+  });
+
   testWidgets('hides the MAL column without mal_id or imdb_id', (tester) async {
     await _pumpStack(
       tester,
       item: _item(
-        syncData: const <String, String>{
-          'awScore': '8.1',
-          'awMalScore': '7.4',
-        },
+        syncData: const <String, String>{'awScore': '8.1', 'awMalScore': '7.4'},
       ),
       showCountdown: false,
     );

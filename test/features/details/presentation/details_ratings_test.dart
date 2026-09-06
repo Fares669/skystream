@@ -50,10 +50,7 @@ void main() {
   test('hides MAL when neither mal_id nor imdb_id is present', () {
     final ratings = AnimeDetailsRatings.fromItem(
       _item(
-        syncData: const <String, String>{
-          'awScore': '8',
-          'awMalScore': '7.2',
-        },
+        syncData: const <String, String>{'awScore': '8', 'awMalScore': '7.2'},
       ),
     );
     expect(ratings.showMalColumn, isFalse);
@@ -74,6 +71,43 @@ void main() {
       ),
     );
     expect(ratings.showMalColumn, isTrue);
+  });
+
+  test('uses IMDb when MAL is unavailable', () {
+    final ratings = AnimeDetailsRatings.fromItem(
+      _item(
+        imdbId: 'tt0283754',
+        syncData: const <String, String>{
+          'awScore': '8.37',
+          'awImdbScore': '7.4',
+        },
+      ),
+    );
+    expect(ratings.externalSource, ExternalRatingSource.imdb);
+    expect(ratings.showExternalColumn, isTrue);
+    expect(ratings.showImdbColumn, isTrue);
+    expect(ratings.showMalColumn, isFalse);
+    expect(ratings.externalScore, 7.4);
+    expect(ratings.displayedExternalScoringUsers, isNull);
+  });
+
+  test('MAL takes priority when MAL and IMDb ratings both exist', () {
+    final ratings = AnimeDetailsRatings.fromItem(
+      _item(
+        imdbId: 'tt0409591',
+        syncData: const <String, String>{
+          'malId': '20',
+          'awMalScore': '8.73',
+          'awMalScoringUsers': '668508',
+          'awImdbScore': '7.8',
+        },
+      ),
+    );
+    expect(ratings.externalSource, ExternalRatingSource.mal);
+    expect(ratings.showMalColumn, isTrue);
+    expect(ratings.showImdbColumn, isFalse);
+    expect(ratings.externalScore, 8.73);
+    expect(ratings.displayedExternalScoringUsers, 668508);
   });
 
   test('unaired titles disable rating and zero MAL scoring users', () {
