@@ -24,6 +24,16 @@ const Key kDetailsRatingsMalBadgeKey = Key('details-ratings-mal-badge');
 const Key kDetailsRatingsMalStarKey = Key('details-ratings-mal-star');
 const Key kDetailsRatingsImdbBadgeKey = Key('details-ratings-imdb-badge');
 const Key kDetailsRatingsImdbStarKey = Key('details-ratings-imdb-star');
+const Key kDetailsRatingsCompactKey = Key('details-ratings-compact');
+const Key kDetailsRatingsCompactWitcherKey = Key(
+  'details-ratings-compact-witcher',
+);
+const Key kDetailsRatingsCompactExternalKey = Key(
+  'details-ratings-compact-external',
+);
+const Key kDetailsRatingsCompactExternalBadgeKey = Key(
+  'details-ratings-compact-external-badge',
+);
 
 const Color kMalBadgeBlue = Color(0xFF2E51A2);
 const Color kImdbBadgeYellow = Color(0xFFF5C518);
@@ -31,10 +41,132 @@ const Color kImdbBadgeYellow = Color(0xFFF5C518);
 const String kRateLoginRequiredToast = 'يجب تسجيل الدخول';
 const String kReviewsClosedToast = 'تم ايقاف المراجعات علي هذا الأنمي';
 
-class DetailsRatingsRow extends ConsumerStatefulWidget {
-  const DetailsRatingsRow({super.key, required this.item});
+
+bool hasDetailsRatingsSummary(MultimediaItem item) {
+  final ratings = AnimeDetailsRatings.fromItem(item);
+  return ratings.witcherScore != null ||
+      (ratings.externalSource != null && ratings.externalScore != null);
+}
+
+class DetailsRatingsSummary extends StatelessWidget {
+  const DetailsRatingsSummary({super.key, required this.item});
 
   final MultimediaItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratings = AnimeDetailsRatings.fromItem(item);
+    final witcherScore = ratings.witcherScore;
+    final externalScore = ratings.externalScore;
+    final source = ratings.externalSource;
+    final showWitcher = witcherScore != null;
+    final showExternal = source != null && externalScore != null;
+    if (!hasDetailsRatingsSummary(item)) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isImdb = source == ExternalRatingSource.imdb;
+    final externalBadgeColor = isImdb ? kImdbBadgeYellow : kMalBadgeBlue;
+    final externalBadgeTextColor = isImdb ? Colors.black : Colors.white;
+    final scoreStyle = theme.textTheme.titleMedium?.copyWith(
+      color: colors.onSurface,
+      fontWeight: FontWeight.w800,
+      height: 1,
+    );
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Align(
+        alignment: Alignment.center,
+        child: FittedBox(
+          key: kDetailsRatingsCompactKey,
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showWitcher)
+                Semantics(
+                  label: 'تقييم انمي ويتشر',
+                  child: KeyedSubtree(
+                    key: kDetailsRatingsCompactWitcherKey,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          size: 20,
+                          color: AppTheme.animeWitcherAccent,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(formatRatingScore(witcherScore!), style: scoreStyle),
+                      ],
+                    ),
+                  ),
+                ),
+              if (showWitcher && showExternal) ...[
+                const SizedBox(width: 10),
+                Text(
+                  '•',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.onSurfaceVariant.withValues(alpha: 0.72),
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              if (showExternal)
+                Semantics(
+                  label: isImdb ? 'IMDb' : 'MAL',
+                  child: KeyedSubtree(
+                    key: kDetailsRatingsCompactExternalKey,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          key: kDetailsRatingsCompactExternalBadgeKey,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: externalBadgeColor,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isImdb ? 'IMDb' : 'MAL',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: externalBadgeTextColor,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(formatRatingScore(externalScore!), style: scoreStyle),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DetailsRatingsRow extends ConsumerStatefulWidget {
+  const DetailsRatingsRow({
+    super.key,
+    required this.item,
+    this.showSummary = true,
+  });
+
+  final MultimediaItem item;
+  final bool showSummary;
 
   @override
   ConsumerState<DetailsRatingsRow> createState() => _DetailsRatingsRowState();
@@ -206,30 +338,31 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _witcherColumn(context, ratings)),
-                  if (showExternal) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: SizedBox(
-                        height: 72,
-                        child: VerticalDivider(
-                          width: 1,
-                          thickness: 1,
-                          color: colors.outlineVariant.withValues(alpha: 0.55),
+            if (widget.showSummary)
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _witcherColumn(context, ratings)),
+                    if (showExternal) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: SizedBox(
+                          height: 72,
+                          child: VerticalDivider(
+                            width: 1,
+                            thickness: 1,
+                            color: colors.outlineVariant.withValues(alpha: 0.55),
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(child: _externalColumn(context, ratings)),
+                      Expanded(child: _externalColumn(context, ratings)),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
+            if (widget.showSummary) const SizedBox(height: 12),
             Directionality(
               textDirection: TextDirection.ltr,
               child: Row(
@@ -244,7 +377,9 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
                         iconColor: (_userRating ?? 0) > 0
                             ? AppTheme.animeWitcherAccent
                             : null,
-                        label: 'قيّم',
+                        label: (_userRating ?? 0) > 0
+                            ? '${_userRating!}/10'
+                            : 'قيّم',
                         onPressed: _onRatePressed,
                       ),
                     ),
