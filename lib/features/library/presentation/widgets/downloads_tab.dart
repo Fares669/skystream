@@ -10,6 +10,7 @@ import 'package:animewitcher/core/utils/episode_label.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/services/download_service.dart';
 import '../../../../core/services/download_concurrency.dart';
+import 'segmented_download_progress.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../details/presentation/playback_launcher.dart';
 import '../downloads_provider.dart';
@@ -608,7 +609,8 @@ class _DownloadItemTile extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                LinearProgressIndicator(
+                SegmentedDownloadProgress(
+                  task: item.task,
                   value: progress,
                   backgroundColor: theme.dividerColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(LayoutConstants.radiusSm),

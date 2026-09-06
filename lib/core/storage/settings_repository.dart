@@ -56,6 +56,11 @@ class SettingsRepository {
 
   int getDownloadConcurrency() => _storageService.getDownloadConcurrency();
 
+  Future<void> setDownloadParallelParts(int value) =>
+      _storageService.setDownloadParallelParts(value);
+
+  int getDownloadParallelParts() => _storageService.getDownloadParallelParts();
+
   Future<void> setDownloadNotificationPrefs(DownloadNotificationPrefs prefs) =>
       _storageService.setDownloadNotificationPrefs(prefs);
 

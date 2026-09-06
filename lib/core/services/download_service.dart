@@ -25,6 +25,7 @@ import '../utils/download_resume.dart';
 import '../utils/download_cleanup.dart';
 import '../utils/episode_label.dart';
 import 'download_concurrency.dart';
+import 'download_parallel.dart';
 import 'download_continued_processing_service.dart';
 
 part 'download_service.g.dart';
@@ -175,6 +176,7 @@ class DownloadService {
     //    then let this instance listen to that broadcast proxy.
     _fdSubscription ??= FileDownloader().updates.listen(_sharedEvents.add);
     _updatesSubscription = _sharedEvents.stream.listen((update) {
+      if (isInternalDownloaderChunk(update.task)) return;
       final trackingUrl = update.task.metaData.isNotEmpty
           ? update.task.metaData
           : update.task.url;
@@ -526,12 +528,12 @@ class DownloadService {
     final records = await FileDownloader().database.allRecords();
     final nativeIds = <String>{
       for (final task in await FileDownloader().allTasks(allGroups: true))
-        task.taskId,
+        if (isLogicalEpisodeDownloadTask(task)) task.taskId,
     };
     final storage = _ref.read(storageServiceProvider);
 
     for (final record in records) {
-      if (record.task is! DownloadTask) continue;
+      if (!isLogicalEpisodeDownloadTask(record.task)) continue;
       final task = record.task as DownloadTask;
       final trackingUrl = downloadTrackingUrl(task);
       final metadata = await storage.getDownloadMetadata(task.taskId);
@@ -659,9 +661,10 @@ class DownloadService {
   int _occupiedSlotCount(List<TaskRecord> records) {
     final occupying = <String>{};
     for (final record in records) {
+      if (!isLogicalEpisodeDownloadTask(record.task)) continue;
       final taskId = record.task.taskId;
       if (_userPausedIds.contains(taskId)) continue;
-      if (occupiesDownloadSlot(
+      if (reservesDownloadSlot(
         status: record.status,
         queueWaiting: _queueWaitingIds.contains(taskId),
       )) {
@@ -680,7 +683,7 @@ class DownloadService {
     final storage = _ref.read(storageServiceProvider);
     final entries = <DownloadQueueEntry>[];
     for (final record in records) {
-      if (record.task is! DownloadTask) continue;
+      if (!isLogicalEpisodeDownloadTask(record.task)) continue;
       if (record.status == TaskStatus.complete ||
           record.status == TaskStatus.canceled) {
         continue;
@@ -756,7 +759,6 @@ class DownloadService {
     _sessionOrder.remove(taskId);
   }
 
-
   String _overlayEpisodeKeyFromParts({
     required String taskId,
     required String trackingUrl,
@@ -798,7 +800,7 @@ class DownloadService {
     final liveProgress = _ref.read(downloadProgressProvider);
     final entries = <DownloadOverlayEntry>[];
     for (final record in records) {
-      if (record.task is! DownloadTask) continue;
+      if (!isLogicalEpisodeDownloadTask(record.task)) continue;
       final trackingUrl = downloadTrackingUrl(record.task);
       final live = liveProgress[trackingUrl];
       final leftoverWaiting = _queueWaitingIds.contains(record.task.taskId);
@@ -971,7 +973,7 @@ class DownloadService {
     final waiterIds = <String>{};
     final completedIds = <String>{};
     for (final record in records) {
-      if (record.task is! DownloadTask) continue;
+      if (!isLogicalEpisodeDownloadTask(record.task)) continue;
       final task = record.task as DownloadTask;
       if (record.status == TaskStatus.complete) {
         completedIds.add(task.taskId);
@@ -993,10 +995,11 @@ class DownloadService {
         continue;
       }
       if (isNativeWaitingSnapshotWaiter(
-        status: record.status,
-        queueWaiting: leftoverWaiting,
-        userPaused: false,
-      )) {
+            status: record.status,
+            queueWaiting: leftoverWaiting,
+            userPaused: false,
+          ) &&
+          task is! ParallelDownloadTask) {
         waiters.add(
           _waitingPayloads[task.taskId] ??
               await _waitingPayloadPreservingBytes(task),
@@ -1084,15 +1087,16 @@ class DownloadService {
     DownloadTask task,
   ) async {
     final payload = Map<String, Object>.from(_waitingPayloadFor(task));
-    try {
-      // ignore: invalid_use_of_visible_for_testing_member
-      final resume = await FileDownloader().downloaderForTesting.getResumeData(
-        task.taskId,
-      );
-      if (resume != null && resume.data.isNotEmpty) {
-        payload['resumeDataBase64'] = resume.data;
-      }
-    } catch (_) {}
+    if (task is! ParallelDownloadTask) {
+      try {
+        // ignore: invalid_use_of_visible_for_testing_member
+        final resume = await FileDownloader().downloaderForTesting
+            .getResumeData(task.taskId);
+        if (resume != null && resume.data.isNotEmpty) {
+          payload['resumeDataBase64'] = resume.data;
+        }
+      } catch (_) {}
+    }
     final saved = await _savedProgressFor(task);
     if (saved.progress > 0) payload['progress'] = saved.progress;
     if (saved.totalSize > 0) payload['expectedBytes'] = saved.totalSize;
@@ -1147,13 +1151,14 @@ class DownloadService {
     String? trackingUrl,
   }) async {
     final byId = await FileDownloader().taskForId(taskId);
-    if (byId is DownloadTask) return byId;
+    if (byId is DownloadTask && !isInternalDownloaderChunk(byId)) return byId;
     final track = trackingUrl ?? '';
     for (final task in await FileDownloader().allTasks(allGroups: true)) {
-      if (task is! DownloadTask) continue;
-      if (task.taskId == taskId) return task;
-      if (track.isNotEmpty && downloadTrackingUrl(task) == track) {
-        return task;
+      if (!isLogicalEpisodeDownloadTask(task)) continue;
+      final downloadTask = task as DownloadTask;
+      if (downloadTask.taskId == taskId) return downloadTask;
+      if (track.isNotEmpty && downloadTrackingUrl(downloadTask) == track) {
+        return downloadTask;
       }
     }
     return null;
@@ -1203,7 +1208,7 @@ class DownloadService {
       for (final record in records) record.task.taskId: record,
     };
     for (final task in await FileDownloader().allTasks(allGroups: true)) {
-      if (task is! DownloadTask) continue;
+      if (!isLogicalEpisodeDownloadTask(task)) continue;
       _queueWaitingIds.remove(task.taskId);
       await _ref
           .read(storageServiceProvider)
@@ -1258,6 +1263,14 @@ class DownloadService {
       await _attachToLiveNativeTask(task, live: live);
       return true;
     }
+
+    final wasWaiting =
+        _queueWaitingIds.contains(task.taskId) ||
+        isQueueWaitingMetadata(
+          await _ref
+              .read(storageServiceProvider)
+              .getDownloadMetadata(task.taskId),
+        );
     _queueWaitingIds.remove(task.taskId);
     _waitingPayloads.remove(task.taskId);
     await _ref
@@ -1265,16 +1278,22 @@ class DownloadService {
         .patchDownloadMetadata(task.taskId, queueWaiting: false);
     _startingTaskIds.add(task.taskId);
     try {
-      var started = await _resumeDownloadTask(task);
-      if (!started) {
-        final saved = await _savedProgressFor(task);
-        if (shouldRestartDownloadFromZero(
-          existingPartialBytes: saved.partialBytes,
-          expectedBytes: saved.totalSize,
-          savedProgress: saved.progress,
-        )) {
-          started = await FileDownloader().enqueue(task);
-        }
+      final started = await _resumeDownloadTask(task);
+      if (!started && wasWaiting) {
+        _queueWaitingIds.add(task.taskId);
+        _waitingPayloads[task.taskId] = _waitingPayloadFor(task);
+        final record = await FileDownloader().database.recordForId(task.taskId);
+        await FileDownloader().database.updateRecord(
+          TaskRecord(
+            task,
+            TaskStatus.paused,
+            record?.progress ?? 0,
+            record?.expectedFileSize ?? -1,
+          ),
+        );
+        await _ref
+            .read(storageServiceProvider)
+            .patchDownloadMetadata(task.taskId, queueWaiting: true);
       }
       return started;
     } finally {
@@ -1700,10 +1719,10 @@ class DownloadService {
         await _ref
             .read(storageServiceProvider)
             .patchDownloadMetadata(taskId, queueWaiting: false);
+        await _resumeDownloadTask(downloadTask);
+      } else {
+        await _enqueueExistingTaskAsWaiterUnlocked(downloadTask);
       }
-      // resume() enqueues with resumeData. HoldingQueue holds it when N is
-      // full — never a fresh GET from byte 0.
-      await _resumeDownloadTask(downloadTask);
 
       for (final waiterId in plan.waitersToRestack) {
         final record = byId[waiterId];
@@ -1732,7 +1751,7 @@ class DownloadService {
     if (_userPausedIds.contains(taskId)) return false;
     for (final record in records) {
       if (record.task.taskId != taskId) continue;
-      return occupiesDownloadSlot(
+      return reservesDownloadSlot(
         status: record.status,
         queueWaiting: _queueWaitingIds.contains(taskId),
       );
@@ -1747,7 +1766,7 @@ class DownloadService {
       if (!ids.contains(task.taskId)) continue;
       final record = await FileDownloader().database.recordForId(task.taskId);
       if (record != null &&
-          occupiesDownloadSlot(
+          reservesDownloadSlot(
             status: record.status,
             queueWaiting: _queueWaitingIds.contains(task.taskId),
           )) {
@@ -1771,44 +1790,26 @@ class DownloadService {
     if (live != null) {
       final record = await FileDownloader().database.recordForId(live.taskId);
       if (record != null &&
-          occupiesDownloadSlot(
+          reservesDownloadSlot(
             status: record.status,
             queueWaiting: _queueWaitingIds.contains(live.taskId),
           )) {
         await _attachToLiveNativeTask(task, live: live);
         return;
       }
-      if (record != null && isLiveNativeDownloadStatus(record.status)) {
-        _queueWaitingIds.remove(task.taskId);
-        _waitingPayloads[task.taskId] = _waitingPayloadFor(task);
-        _rememberSessionTask(task.taskId);
-        _publishProgress(
-          trackingUrl: trackingUrl,
-          taskId: task.taskId,
-          progress: (record.progress < 0 || record.progress > 1)
-              ? 0.0
-              : record.progress,
-          totalSize: record.expectedFileSize,
-          status: TaskStatus.enqueued,
-        );
-        return;
-      }
     }
 
     final previous = await FileDownloader().database.recordForId(task.taskId);
-    var progress = keepLastKnownDownloadProgress(
-      incoming: previous?.progress ?? 0.0,
-      lastKnown: previous?.progress,
-    );
+    final progress = previous?.progress ?? 0.0;
     final totalSize = previous?.expectedFileSize ?? -1;
-    _queueWaitingIds.remove(task.taskId);
+    _queueWaitingIds.add(task.taskId);
     _waitingPayloads[task.taskId] = _waitingPayloadFor(task);
     _rememberSessionTask(task.taskId);
     await _ref
         .read(storageServiceProvider)
-        .patchDownloadMetadata(task.taskId, queueWaiting: false);
+        .patchDownloadMetadata(task.taskId, queueWaiting: true);
     await FileDownloader().database.updateRecord(
-      TaskRecord(task, TaskStatus.enqueued, progress, totalSize),
+      TaskRecord(task, TaskStatus.paused, progress, totalSize),
     );
     _publishProgress(
       trackingUrl: trackingUrl,
@@ -1818,15 +1819,50 @@ class DownloadService {
       status: TaskStatus.enqueued,
     );
     _updatesController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
+  }
 
-    final success = await _resumeDownloadTask(task);
-    if (!success) {
-      _queueWaitingIds.add(task.taskId);
-      _waitingPayloads[task.taskId] = _waitingPayloadFor(task);
-      await _ref
-          .read(storageServiceProvider)
-          .patchDownloadMetadata(task.taskId, queueWaiting: true);
+  Future<DownloadTask> _adaptiveTaskForFreshStart(
+    DownloadTask template, {
+    int knownTotalBytes = -1,
+  }) async {
+    if (template is ParallelDownloadTask) return template;
+    final preference = _ref
+        .read(storageServiceProvider)
+        .getDownloadParallelParts();
+    if (preference == 1) return template;
+
+    final metadata = await getMetadata(template.url, headers: template.headers);
+    final total = knownTotalBytes > 0
+        ? knownTotalBytes
+        : (metadata?.size ?? -1);
+    final parts = selectAdaptiveDownloadParts(
+      preference: preference,
+      totalBytes: total,
+      supportsRanges: metadata?.supportsRanges ?? false,
+    );
+    return buildAdaptiveDownloadTask(template: template, parts: parts);
+  }
+
+  Future<bool> _enqueueFreshAdaptiveTask(
+    DownloadTask template, {
+    int knownTotalBytes = -1,
+  }) async {
+    final task = await _adaptiveTaskForFreshStart(
+      template,
+      knownTotalBytes: knownTotalBytes,
+    );
+    final previous = await FileDownloader().database.recordForId(task.taskId);
+    if (previous != null) {
+      await FileDownloader().database.updateRecord(
+        TaskRecord(
+          task,
+          TaskStatus.enqueued,
+          previous.progress,
+          previous.expectedFileSize,
+        ),
+      );
     }
+    return FileDownloader().enqueue(task);
   }
 
   Future<bool> _resumeDownloadTask(DownloadTask task) async {
@@ -1854,11 +1890,27 @@ class DownloadService {
       );
     }
 
+    if (task is ParallelDownloadTask) {
+      // A started parallel parent may only continue from the plugin's chunk
+      // ResumeData. Never reinterpret it as a single partial file and never
+      // fresh-enqueue the parent after bytes may have been written.
+      try {
+        // ignore: invalid_use_of_visible_for_testing_member
+        final resumeData = await FileDownloader().downloaderForTesting
+            .getResumeData(task.taskId);
+        if (resumeData != null && resumeData.data.isNotEmpty) {
+          return await FileDownloader().resume(task);
+        }
+      } catch (_) {}
+      return false;
+    }
+
     return resumeOrRestartDownload(
       canResume: () => FileDownloader().taskCanResume(task),
       resume: () => FileDownloader().resume(task),
       resumeFromPartial: () => _resumeUsingPartialFile(task),
-      restart: () => FileDownloader().enqueue(task),
+      restart: () =>
+          _enqueueFreshAdaptiveTask(task, knownTotalBytes: saved.totalSize),
       savedProgress: saved.progress,
       existingPartialBytes: saved.partialBytes,
       expectedBytes: saved.totalSize,
@@ -1866,6 +1918,7 @@ class DownloadService {
   }
 
   Future<bool> _resumeUsingPartialFile(DownloadTask task) async {
+    if (task is ParallelDownloadTask) return false;
     String destinationPath;
     try {
       destinationPath = await task.filePath();
@@ -2013,9 +2066,9 @@ class DownloadService {
     Map<String, String>? headers,
   }) async {
     try {
-      // 1. Try HEAD request first
       int? size;
       String? mimeType;
+      var supportsRanges = false;
 
       try {
         final response = await _dio
@@ -2024,64 +2077,57 @@ class DownloadService {
               options: Options(headers: headers, followRedirects: true),
             )
             .timeout(const Duration(seconds: 10));
-
-        final contentLength = response.headers.value('content-length');
-        if (contentLength != null) {
-          size = int.tryParse(contentLength);
-        }
+        size = int.tryParse(response.headers.value('content-length') ?? '');
         mimeType = response.headers.value('content-type');
-      } catch (e) {
-        // HEAD failed, will try GET fallback
-      }
+        final acceptRanges = response.headers.value('accept-ranges');
+        supportsRanges = acceptRanges?.toLowerCase().contains('bytes') == true;
+      } catch (_) {}
 
-      // 2. Fallback to GET with Range if size unknown
-      if (size == null) {
+      // A 206 response is stronger evidence than Accept-Ranges and also covers
+      // hosts that reject HEAD. Stream and cancel immediately so a bad server
+      // that ignores Range cannot buffer a whole episode into memory.
+      if (size == null || !supportsRanges) {
         try {
-          // Some media hosts reject HEAD but honor a byte-range GET. Use a
-          // streaming response here so a server that ignores Range cannot
-          // buffer an entire movie/episode into memory just to discover its
-          // size. We only need the response headers.
-          final getResponse = await _dio
+          final response = await _dio
               .get<dynamic>(
                 url,
                 options: Options(
                   headers: {...?headers, 'Range': 'bytes=0-0'},
                   followRedirects: true,
                   responseType: ResponseType.stream,
+                  validateStatus: (status) =>
+                      status != null && (status == 200 || status == 206),
                 ),
               )
               .timeout(const Duration(seconds: 10));
-
-          final rangeContentLength = getResponse.headers.value('content-range');
-          if (rangeContentLength != null) {
-            final totalSize = rangeContentLength.split('/').last;
-            size = int.tryParse(totalSize);
+          final contentRange = response.headers.value('content-range');
+          if (response.statusCode == 206 && contentRange != null) {
+            supportsRanges = true;
+            final total = contentRange.split('/').last;
+            size = int.tryParse(total) ?? size;
           } else {
-            // A compliant 200 response may still expose the full size. Do not
-            // infer it from the streamed body; that would defeat the point of
-            // this metadata-only request.
-            final contentLength = getResponse.headers.value('content-length');
-            final parsedLength = int.tryParse(contentLength ?? '');
-            if (parsedLength != null && parsedLength > 1) {
-              size = parsedLength;
+            final contentLength = int.tryParse(
+              response.headers.value('content-length') ?? '',
+            );
+            if (contentLength != null && contentLength > 1) {
+              size ??= contentLength;
             }
           }
-          mimeType ??= getResponse.headers.value('content-type');
-
-          final body = getResponse.data;
+          mimeType ??= response.headers.value('content-type');
+          final body = response.data;
           if (body is ResponseBody) {
-            // Close the streamed response without reading a potentially huge
-            // body when the server ignored the Range header.
             final subscription = body.stream.listen(null);
             await subscription.cancel();
           }
-        } catch (e) {
-          // GET fallback failed
-        }
+        } catch (_) {}
       }
 
-      return DownloadMetadata(size: size, mimeType: mimeType);
-    } catch (e) {
+      return DownloadMetadata(
+        size: size,
+        mimeType: mimeType,
+        supportsRanges: supportsRanges,
+      );
+    } catch (_) {
       return null;
     }
   }
@@ -2357,27 +2403,60 @@ class DownloadService {
           path = await task.filePath();
         } catch (_) {}
 
-        _startingTaskIds.add(task.taskId);
+        final storage = _ref.read(storageServiceProvider);
+        final maxConcurrent = clampDownloadConcurrency(
+          storage.getDownloadConcurrency(),
+        );
+        final occupied = _occupiedSlotCount(
+          await FileDownloader().database.allRecords(),
+        );
+        final startNow = occupied < maxConcurrent;
+        final expectedBytes = totalBytes > 0 ? totalBytes : -1;
+
         _waitingPayloads[task.taskId] = _waitingPayloadFor(task);
         _rememberSessionTask(task.taskId);
-        final storage = _ref.read(storageServiceProvider);
         await storage.saveDownloadMetadata(
           task.taskId,
           item,
           episode: episode,
           trackingUrl: trackingUrl ?? url,
           filePath: path,
-          queueWaiting: false,
+          queueWaiting: !startNow,
         );
         _ref.read(activeDownloadsProvider.notifier).add(trackingUrl ?? url);
-        // Row must appear on التنزيلات before enqueue returns. HQ overflow
-        // used to wait for the running event (their turn) because metadata
-        // was saved after enqueue and `_refreshList` skipped null metadata.
-        _updatesController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
 
-        final success = await FileDownloader().enqueue(task);
+        if (!startNow) {
+          _queueWaitingIds.add(task.taskId);
+          await FileDownloader().database.updateRecord(
+            TaskRecord(task, TaskStatus.paused, 0, expectedBytes),
+          );
+          _publishProgress(
+            trackingUrl: trackingUrl ?? url,
+            taskId: task.taskId,
+            progress: 0,
+            totalSize: expectedBytes,
+            status: TaskStatus.enqueued,
+          );
+          _updatesController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
+          await _persistNativeWaitingSnapshot();
+          unawaited(_syncSessionOverlay());
+          return true;
+        }
+
+        _startingTaskIds.add(task.taskId);
+        final transferTask = await _adaptiveTaskForFreshStart(
+          task,
+          knownTotalBytes: expectedBytes,
+        );
+        _updatesController.add(
+          TaskStatusUpdate(transferTask, TaskStatus.enqueued),
+        );
+        final success = await FileDownloader().enqueue(transferTask);
         if (kDebugMode) {
-          debugPrint('[DownloadService] Enqueue result: $success');
+          debugPrint(
+            '[DownloadService] Enqueue result: $success '
+            '(parts=${downloadTaskPartCount(transferTask)})',
+          );
         }
 
         if (!success) {
@@ -2387,12 +2466,13 @@ class DownloadService {
           _ref
               .read(activeDownloadsProvider.notifier)
               .remove(trackingUrl ?? url);
-          _updatesController.add(TaskStatusUpdate(task, TaskStatus.canceled));
+          _updatesController.add(
+            TaskStatusUpdate(transferTask, TaskStatus.canceled),
+          );
           return false;
         }
 
         await _persistNativeWaitingSnapshot();
-        _updatesController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
         unawaited(_syncSessionOverlay());
         return true;
       } catch (error) {
@@ -2734,8 +2814,9 @@ class DownloadService {
 class DownloadMetadata {
   final int? size;
   final String? mimeType;
+  final bool supportsRanges;
 
-  DownloadMetadata({this.size, this.mimeType});
+  DownloadMetadata({this.size, this.mimeType, this.supportsRanges = false});
 
   String get sizeString {
     if (size == null) return "Unknown size";

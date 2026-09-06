@@ -17,6 +17,7 @@ import '../general_settings_provider.dart';
 import 'package:animewitcher/l10n/generated/app_localizations.dart';
 import '../cache_provider.dart';
 import '../../../../core/services/download_concurrency.dart';
+import '../../../../core/services/download_parallel.dart';
 
 import 'package:animewitcher/core/services/notification_service.dart';
 
@@ -253,6 +254,61 @@ void showDownloadConcurrencyDialog(
                 },
               );
             }).toList(),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+String downloadPartsTitle() => 'أجزاء التنزيل';
+
+String downloadPartsSubtitle(int value) {
+  final normalized = normalizeDownloadPartPreference(value);
+  return normalized == kDownloadPartsAuto ? 'تلقائي' : '$normalized أجزاء';
+}
+
+void showDownloadPartsDialog(BuildContext context, WidgetRef ref, int current) {
+  final selected = normalizeDownloadPartPreference(current);
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: Text(downloadPartsTitle()),
+      content: RadioGroup<int>(
+        groupValue: selected,
+        onChanged: (value) {
+          if (value == null) return;
+          ref
+              .read(generalSettingsProvider.notifier)
+              .setDownloadParallelParts(value);
+          Navigator.pop<void>(context);
+        },
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: kDownloadPartChoices
+                .map((value) {
+                  final auto = value == kDownloadPartsAuto;
+                  return ListTile(
+                    title: Text(auto ? 'تلقائي' : '$value'),
+                    subtitle: Text(
+                      auto
+                          ? 'يختار العدد حسب حجم الملف ودعم الخادم'
+                          : value == 1
+                          ? 'اتصال واحد'
+                          : '$value اتصالات متوازية عند دعم الخادم',
+                    ),
+                    leading: Radio<int>(value: value),
+                    onTap: () {
+                      ref
+                          .read(generalSettingsProvider.notifier)
+                          .setDownloadParallelParts(value);
+                      Navigator.pop<void>(context);
+                    },
+                  );
+                })
+                .toList(growable: false),
           ),
         ),
       ),
