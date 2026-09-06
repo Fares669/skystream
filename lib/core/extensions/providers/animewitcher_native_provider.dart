@@ -1578,6 +1578,29 @@ class AnimeWitcherNativeProvider extends AnimeWitcherProvider {
     // a list reached the player and the artwork layer without a MyAnimeList
     // id to look anything up with.
     final hitSync = <String, String>{};
+    final hitDetails = _map(source['details']);
+    final hitRating = _map(source['rating']);
+    void putHitSync(String key, dynamic raw) {
+      final value = _text(raw);
+      if (value.isNotEmpty) hitSync[key] = value;
+    }
+
+    // Keep the same source priority used by the details screen available on
+    // catalog cards without another HTTP request: MAL -> IMDb -> AnimeWitcher.
+    putHitSync('awMalScore', hitDetails['mal_mean'] ?? hitDetails['mal_score']);
+    putHitSync(
+      'awImdbScore',
+      hitDetails['imdb_rate'] ??
+          hitDetails['imdbRate'] ??
+          hitDetails['imdb_score'] ??
+          hitDetails['imdbScore'] ??
+          source['imdb_rate'] ??
+          source['imdbRate'] ??
+          source['imdb_score'] ??
+          source['imdbScore'],
+    );
+    putHitSync('awScore', hitRating['rate']);
+
     final hitMalId = _malId(source);
     if (hitMalId > 0) {
       hitSync['malId'] = '$hitMalId';

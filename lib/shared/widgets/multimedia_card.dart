@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:animewitcher/l10n/generated/app_localizations.dart';
 import '../../core/domain/entity/multimedia_item.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/artwork_quality.dart';
+import '../../core/utils/catalog_rating.dart';
 import '../../core/utils/catalog_label.dart';
 import '../../core/utils/image_fallbacks.dart';
 import '../../core/utils/responsive_breakpoints.dart';
@@ -34,7 +36,8 @@ class MultimediaCardLayout {
     BuildContext context, {
     double fallback = 16,
   }) {
-    if (context.isHandsetLandscape) return handsetLandscapeGridHorizontalPadding;
+    if (context.isHandsetLandscape)
+      return handsetLandscapeGridHorizontalPadding;
     if (context.isHandset) return handsetPortraitGridHorizontalPadding;
     return fallback;
   }
@@ -158,6 +161,9 @@ class MultimediaCard extends StatelessWidget {
   /// Smaller gray line under the title: episode time or catalog type.
   final String? subtitle;
 
+  /// Preferred catalog rating, using MAL -> IMDb -> AnimeWitcher priority.
+  final CatalogRating? catalogRating;
+
   /// Release year drawn on the bottom-right of the poster.
   final int? year;
 
@@ -186,6 +192,7 @@ class MultimediaCard extends StatelessWidget {
     this.episodeBadge,
     this.showImageLoadingShimmer = true,
     this.subtitle,
+    this.catalogRating,
     this.year,
     this.posterBadge,
     this.malId,
@@ -209,6 +216,7 @@ class MultimediaCard extends StatelessWidget {
        title = item.title,
        episodeBadge = item.episodeBadge,
        subtitle = multimediaCardSubtitle(item),
+       catalogRating = preferredCatalogRating(item),
        year = multimediaCardYear(item),
        posterBadge = multimediaCardPosterBadge(
          item,
@@ -285,6 +293,14 @@ class MultimediaCard extends StatelessWidget {
     if (cornerBadge != null) semanticParts.add(cornerBadge);
     if (yearText != null) semanticParts.add(yearText);
     if (caption != null) semanticParts.add(caption);
+    if (catalogRating case final rating?) {
+      final source = switch (rating.source) {
+        CatalogRatingSource.mal => 'MAL',
+        CatalogRatingSource.imdb => 'IMDb',
+        CatalogRatingSource.animeWitcher => 'تقييم انمي ويتشر',
+      };
+      semanticParts.add('$source ${formatCatalogRatingScore(rating.score)}');
+    }
     final semanticLabel = semanticParts.join('، ');
 
     return Semantics(
@@ -433,11 +449,69 @@ class MultimediaCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCatalogRating(TextStyle subtitleTextStyle) {
+    final rating = catalogRating!;
+    final score = Text(
+      formatCatalogRatingScore(rating.score),
+      maxLines: 1,
+      style: subtitleTextStyle,
+    );
+    final sourceSize = ((subtitleTextStyle.fontSize ?? 11) - 1)
+        .clamp(8.0, 12.0)
+        .toDouble();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: switch (rating.source) {
+        CatalogRatingSource.mal => <Widget>[
+          Text(
+            'MAL',
+            key: const Key('catalog-rating-mal-source'),
+            style: subtitleTextStyle.copyWith(
+              color: const Color(0xFF2E51A2),
+              fontSize: sourceSize,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 4),
+          score,
+        ],
+        CatalogRatingSource.imdb => <Widget>[
+          Text(
+            'IMDb',
+            key: const Key('catalog-rating-imdb-source'),
+            style: subtitleTextStyle.copyWith(
+              color: const Color(0xFFF5C518),
+              fontSize: sourceSize,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 4),
+          score,
+        ],
+        CatalogRatingSource.animeWitcher => <Widget>[
+          Icon(
+            Icons.star_rounded,
+            key: const Key('catalog-rating-witcher-source'),
+            size: (subtitleTextStyle.fontSize ?? 11) + 3,
+            color: AppTheme.animeWitcherAccent,
+          ),
+          const SizedBox(width: 3),
+          score,
+        ],
+      },
+    );
+  }
+
   Widget _buildCaption({
     required TextStyle titleTextStyle,
     required TextStyle subtitleTextStyle,
     required String? caption,
   }) {
+    final hasRating = catalogRating != null;
+    final subtitleHeight =
+        (subtitleTextStyle.fontSize ?? 11) * (subtitleTextStyle.height ?? 1.2);
+
     return Padding(
       padding: const EdgeInsetsDirectional.only(top: 6, start: 2, end: 2),
       child: Directionality(
@@ -454,21 +528,31 @@ class MultimediaCard extends StatelessWidget {
               style: titleTextStyle,
             ),
             const SizedBox(height: 2),
-            if (caption != null)
-              Text(
-                caption,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                style: subtitleTextStyle,
+            if (caption != null || hasRating)
+              SizedBox(
+                height: subtitleHeight,
+                child: Row(
+                  children: [
+                    if (caption != null)
+                      Flexible(
+                        child: Text(
+                          caption,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
+                          style: subtitleTextStyle,
+                        ),
+                      ),
+                    // Intentionally no bullet/dot between the catalog caption
+                    // and the rating source.
+                    if (caption != null && hasRating) const SizedBox(width: 8),
+                    if (hasRating) _buildCatalogRating(subtitleTextStyle),
+                  ],
+                ),
               )
             else
-              SizedBox(
-                height:
-                    (subtitleTextStyle.fontSize ?? 11) *
-                    (subtitleTextStyle.height ?? 1.2),
-              ),
+              SizedBox(height: subtitleHeight),
           ],
         ),
       ),
