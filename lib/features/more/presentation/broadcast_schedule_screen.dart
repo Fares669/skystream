@@ -1,5 +1,6 @@
 /// V1.4.8 schedule integration: each broadcast day loads independently with
 /// bounded pages, pull-to-refresh, request cancellation, and safe tab cleanup.
+import 'more_sidebar_shell.dart';
 import 'dart:async';
 
 import 'package:animewitcher/shared/widgets/apple_liquid_glass.dart';
@@ -237,7 +238,8 @@ class _BroadcastScheduleScreenState
             // title is aligned to that same edge in Arabic.
             actions: const <Widget>[WindowControlsGap()],
             title: ApplePersistentGlassHeaderScope(
-              enabled: Navigator.of(context).canPop(),
+              enabled:
+                  !MorePaneScope.of(context) && Navigator.of(context).canPop(),
               onBack: () => Navigator.of(context).pop(),
               child: Align(
                 alignment: isArabic
@@ -251,7 +253,9 @@ class _BroadcastScheduleScreenState
                 ),
               ),
             ),
-            leading: appleUsesPersistentLiquidGlassHeader
+            leading:
+                appleUsesPersistentLiquidGlassHeader ||
+                    MorePaneScope.of(context)
                 ? null
                 : AppleLiquidGlassBackButton(
                     onPressed: () => Navigator.of(context).pop(),

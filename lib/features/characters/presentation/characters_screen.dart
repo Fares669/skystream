@@ -1,3 +1,4 @@
+import '../../more/presentation/more_sidebar_shell.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -331,7 +332,8 @@ class _CharactersScreenState extends ConsumerState<CharactersScreen>
             // title is aligned to that same edge in Arabic.
             actions: const <Widget>[WindowControlsGap()],
             title: ApplePersistentGlassHeaderScope(
-              enabled: Navigator.of(context).canPop(),
+              enabled:
+                  !MorePaneScope.of(context) && Navigator.of(context).canPop(),
               onBack: () => Navigator.of(context).pop(),
               child: Align(
                 alignment: isArabic
@@ -345,7 +347,9 @@ class _CharactersScreenState extends ConsumerState<CharactersScreen>
                 ),
               ),
             ),
-            leading: appleUsesPersistentLiquidGlassHeader
+            leading:
+                appleUsesPersistentLiquidGlassHeader ||
+                    MorePaneScope.of(context)
                 ? null
                 : AppleLiquidGlassBackButton(
                     onPressed: () => Navigator.of(context).pop(),

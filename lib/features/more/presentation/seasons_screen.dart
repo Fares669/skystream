@@ -1,3 +1,4 @@
+import 'more_sidebar_shell.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -113,7 +114,8 @@ class _SeasonsScreenState extends ConsumerState<SeasonsScreen>
             // title is aligned to that same edge in Arabic.
             actions: const <Widget>[WindowControlsGap()],
             title: ApplePersistentGlassHeaderScope(
-              enabled: Navigator.of(context).canPop(),
+              enabled:
+                  !MorePaneScope.of(context) && Navigator.of(context).canPop(),
               onBack: () => Navigator.of(context).pop(),
               child: Align(
                 alignment: isArabic
@@ -127,7 +129,9 @@ class _SeasonsScreenState extends ConsumerState<SeasonsScreen>
                 ),
               ),
             ),
-            leading: appleUsesPersistentLiquidGlassHeader
+            leading:
+                appleUsesPersistentLiquidGlassHeader ||
+                    MorePaneScope.of(context)
                 ? null
                 : AppleLiquidGlassBackButton(
                     onPressed: () => Navigator.of(context).pop(),
@@ -527,7 +531,8 @@ class _SeasonResultsScreen extends StatelessWidget {
             // title is aligned to that same edge in Arabic.
             actions: const <Widget>[WindowControlsGap()],
             title: ApplePersistentGlassHeaderScope(
-              enabled: Navigator.of(context).canPop(),
+              enabled:
+                  !MorePaneScope.of(context) && Navigator.of(context).canPop(),
               onBack: () => Navigator.of(context).pop(),
               child: Align(
                 alignment: isArabic
@@ -541,7 +546,9 @@ class _SeasonResultsScreen extends StatelessWidget {
                 ),
               ),
             ),
-            leading: appleUsesPersistentLiquidGlassHeader
+            leading:
+                appleUsesPersistentLiquidGlassHeader ||
+                    MorePaneScope.of(context)
                 ? null
                 : AppleLiquidGlassBackButton(
                     onPressed: () => Navigator.of(context).pop(),
