@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/navigation/taskbar_destination.dart';
 import '../../../core/services/download_concurrency.dart';
+import '../../../core/services/download_parallel.dart';
 import '../../../core/services/download_service.dart';
 import '../../../core/storage/settings_repository.dart';
 
@@ -13,6 +14,7 @@ class GeneralSettings {
   final List<String> taskbarOrder;
   final Set<String> hiddenTaskbarItems;
   final int downloadConcurrency;
+  final int downloadParallelParts;
   final DownloadNotificationPrefs downloadNotifications;
 
   const GeneralSettings({
@@ -21,6 +23,7 @@ class GeneralSettings {
     this.taskbarOrder = defaultTaskbarOrderIds,
     this.hiddenTaskbarItems = const <String>{},
     this.downloadConcurrency = kDownloadConcurrencyDefault,
+    this.downloadParallelParts = kDownloadPartsAuto,
     this.downloadNotifications = const DownloadNotificationPrefs(),
   });
 
@@ -30,6 +33,7 @@ class GeneralSettings {
     List<String>? taskbarOrder,
     Set<String>? hiddenTaskbarItems,
     int? downloadConcurrency,
+    int? downloadParallelParts,
     DownloadNotificationPrefs? downloadNotifications,
   }) {
     return GeneralSettings(
@@ -38,6 +42,8 @@ class GeneralSettings {
       taskbarOrder: taskbarOrder ?? this.taskbarOrder,
       hiddenTaskbarItems: hiddenTaskbarItems ?? this.hiddenTaskbarItems,
       downloadConcurrency: downloadConcurrency ?? this.downloadConcurrency,
+      downloadParallelParts:
+          downloadParallelParts ?? this.downloadParallelParts,
       downloadNotifications:
           downloadNotifications ?? this.downloadNotifications,
     );
@@ -66,6 +72,7 @@ class GeneralSettingsNotifier extends _$GeneralSettingsNotifier {
       taskbarOrder: order,
       hiddenTaskbarItems: hidden,
       downloadConcurrency: repository.getDownloadConcurrency(),
+      downloadParallelParts: repository.getDownloadParallelParts(),
       downloadNotifications: repository.getDownloadNotificationPrefs(),
     );
   }
@@ -124,6 +131,14 @@ class GeneralSettingsNotifier extends _$GeneralSettingsNotifier {
     state = state.copyWith(
       downloadConcurrency: clampDownloadConcurrency(value),
     );
+  }
+
+  Future<void> setDownloadParallelParts(int value) async {
+    final normalized = normalizeDownloadPartPreference(value);
+    await ref
+        .read(settingsRepositoryProvider)
+        .setDownloadParallelParts(normalized);
+    state = state.copyWith(downloadParallelParts: normalized);
   }
 
   Future<void> setDownloadNotificationPrefs(

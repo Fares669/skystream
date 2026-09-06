@@ -1,4 +1,5 @@
 import 'package:animewitcher/core/services/download_concurrency.dart';
+import 'package:animewitcher/core/services/download_parallel.dart';
 import 'package:animewitcher/core/storage/storage_service.dart';
 
 /// In-memory settings box for download-queue tests. Only settings getters
@@ -14,6 +15,16 @@ class MemoryStorageService extends StorageService {
   @override
   int getDownloadConcurrency() {
     return parseDownloadConcurrency(settings[kDownloadConcurrencyStorageKey]);
+  }
+
+  @override
+  Future<void> setDownloadParallelParts(int value) async {
+    settings[kDownloadPartsSettingKey] = normalizeDownloadPartPreference(value);
+  }
+
+  @override
+  int getDownloadParallelParts() {
+    return normalizeDownloadPartPreference(settings[kDownloadPartsSettingKey]);
   }
 
   @override

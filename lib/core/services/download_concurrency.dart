@@ -43,25 +43,21 @@ int parseDownloadConcurrency(Object? raw) {
 /// episode as paused and let the next waiter run; the user can resume later.
 const int kDownloadTaskRetries = 0;
 
-/// [Config.holdingQueue] triple: `(maxConcurrent, maxConcurrentByHost, maxConcurrentByGroup)`.
+/// ParallelDownloadTask creates native child DownloadTasks in the reserved
+/// `chunk` group. background_downloader's HoldingQueue counts both the parent
+/// and every child against the same global cap, which can deadlock at N=1 and
+/// couples "episodes at once" to "parts per episode".
 ///
-/// Host and group are left unconstrained (`null`) so the user's N is the only
-/// cap. Official SkyStream copied the docs example `(N, 2, 1)`. AnimeWitcher
-/// notifications use group `'downloads'` and episode tasks share the default
-/// task group, so a group cap of 1 would force global sequential downloads and
-/// ignore the 1–5 setting.
-(int, int?, int?) downloadHoldingQueueValue(int maxConcurrent) =>
-    (clampDownloadConcurrency(maxConcurrent), null, null);
+/// AnimeWitcher therefore keeps the episode cap in its persisted logical queue
+/// and leaves native chunk scheduling unconstrained. Active native tasks still
+/// run in the background; parked episode rows are persisted and recovered.
+List<(String, dynamic)> downloadHoldingQueueGlobalConfig(int maxConcurrent) {
+  clampDownloadConcurrency(maxConcurrent);
+  return <(String, dynamic)>[(Config.holdingQueue, false)];
+}
 
-List<(String, dynamic)> downloadHoldingQueueGlobalConfig(int maxConcurrent) =>
-    <(String, dynamic)>[
-      (Config.holdingQueue, downloadHoldingQueueValue(maxConcurrent)),
-    ];
-
-/// Persists [maxConcurrent] then reconfigures FileDownloader's holding queue
-/// `(N, null, null)`. Every user-started episode is OS-enqueued; extras wait
-/// natively as **في الانتظار**. Dart still promotes leftover waiters whenever
-/// the isolate is alive (complete / fail / cancel / foreground / init).
+/// Persists the logical episode cap and disables the plugin HoldingQueue.
+/// `_syncQueueToCapUnlocked` owns promotion of queued episode rows.
 Future<int> applyDownloadQueueSettings({
   required int maxConcurrent,
   required Future<void> Function(int value) persist,
@@ -111,6 +107,28 @@ bool occupiesDownloadSlot({
     case TaskStatus.waitingToRetry:
       return true;
     case TaskStatus.enqueued:
+    case TaskStatus.paused:
+    case TaskStatus.complete:
+    case TaskStatus.canceled:
+    case TaskStatus.failed:
+    case TaskStatus.notFound:
+      return false;
+  }
+}
+
+/// Reserves one logical episode slot as soon as it has been handed to the
+/// native downloader. This closes the enqueue->running race without treating a
+/// persisted `queueWaiting` row as active.
+bool reservesDownloadSlot({
+  required TaskStatus status,
+  bool queueWaiting = false,
+}) {
+  if (queueWaiting) return false;
+  switch (status) {
+    case TaskStatus.enqueued:
+    case TaskStatus.running:
+    case TaskStatus.waitingToRetry:
+      return true;
     case TaskStatus.paused:
     case TaskStatus.complete:
     case TaskStatus.canceled:
@@ -483,8 +501,11 @@ DownloadOverlaySession planDownloadOverlaySession({
     if (entry.status == TaskStatus.complete) return 2;
     return 1;
   }
+
   for (final entry in sorted) {
-    final key = entry.episodeKey.isEmpty ? 'id:${entry.taskId}' : entry.episodeKey;
+    final key = entry.episodeKey.isEmpty
+        ? 'id:${entry.taskId}'
+        : entry.episodeKey;
     final existingIndex = indexByEpisode[key];
     if (existingIndex == null) {
       indexByEpisode[key] = list.length;
@@ -495,7 +516,8 @@ DownloadOverlaySession planDownloadOverlaySession({
     final incomingPriority = priority(entry);
     final existingPriority = priority(existing);
     if (incomingPriority > existingPriority ||
-        (incomingPriority == existingPriority && entry.progress > existing.progress)) {
+        (incomingPriority == existingPriority &&
+            entry.progress > existing.progress)) {
       list[existingIndex] = entry;
     }
   }
@@ -761,7 +783,7 @@ bool isNativeWaitingSnapshotWaiter({
   required bool userPaused,
 }) {
   if (userPaused) return false;
-  return queueWaiting || status == TaskStatus.enqueued;
+  return queueWaiting;
 }
 
 /// Plugin `allTasks` / `taskForId` membership: HQ waiter or URLSession task.
@@ -945,7 +967,7 @@ DownloadQueuePlan planDownloadQueue({
       .where(
         (entry) =>
             !entry.userPaused &&
-            occupiesDownloadSlot(
+            reservesDownloadSlot(
               status: entry.status,
               queueWaiting: entry.queueWaiting,
             ),
@@ -1066,7 +1088,7 @@ List<String> waitersToRestackAfterResume({
   return waitingFifoIdsIncludingResumed.skip(index + 1).where((id) {
     final entry = byId[id];
     if (entry == null || entry.userPaused) return false;
-    if (occupiesDownloadSlot(
+    if (reservesDownloadSlot(
       status: entry.status,
       queueWaiting: entry.queueWaiting,
     )) {
@@ -1090,7 +1112,7 @@ UserResumeQueuePlan planUserResumeQueue({
         (entry) =>
             entry.taskId != resumedId &&
             !entry.userPaused &&
-            occupiesDownloadSlot(
+            reservesDownloadSlot(
               status: entry.status,
               queueWaiting: entry.queueWaiting,
             ),

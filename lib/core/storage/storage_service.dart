@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'dart:io';
 import '../domain/entity/multimedia_item.dart';
 import '../services/download_concurrency.dart';
+import '../services/download_parallel.dart';
 import '../utils/safe_uri.dart';
 
 part 'storage_service.g.dart';
@@ -637,6 +638,17 @@ class StorageService {
       _settingsBox.get(kDownloadConcurrencyStorageKey),
     );
   }
+
+  Future<void> setDownloadParallelParts(int value) async {
+    await _settingsBox.put(
+      kDownloadPartsSettingKey,
+      normalizeDownloadPartPreference(value),
+    );
+  }
+
+  int getDownloadParallelParts() => normalizeDownloadPartPreference(
+    _settingsBox.get(kDownloadPartsSettingKey),
+  );
 
   Future<void> setDownloadNotificationPrefs(
     DownloadNotificationPrefs prefs,
