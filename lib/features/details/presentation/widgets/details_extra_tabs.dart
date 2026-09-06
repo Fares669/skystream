@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,6 +97,9 @@ class _DetailsExtraTabsState extends State<DetailsExtraTabs>
 
   void _handleTabTick() {
     if (_tabController.indexIsChanging) return;
+    // The body is as tall as the tab being read, so a change of tab is a
+    // change of height.
+    if (mounted) setState(() {});
     _notifyTab(_tabController.index);
   }
 
@@ -172,11 +173,38 @@ class _DetailsExtraTabsState extends State<DetailsExtraTabs>
           0.0,
           double.infinity,
         );
-        final gridHeight = detailsExtraTabBodyHeight(context, bodyWidth);
-        final bodyHeight = math.max(
-          gridHeight,
-          _charactersTabBodyHeight(context, gridHeight, maxWidth: bodyWidth),
+        // Room for the rows the tab on screen actually fills. These grids
+        // show at most six slots, so on a wide window that is one row, and
+        // reserving two left a poster's height of nothing underneath.
+        final columns = detailsExtraTabRenderedColumns(context, bodyWidth);
+        final onRelated = _tabController.index == detailsExtraRelatedTabIndex;
+        final tabItems = onRelated
+            ? widget.related.asData?.value.length ?? 0
+            : widget.similar.asData?.value.length ?? 0;
+        final hasMore = onRelated
+            ? widget.relatedHasMore
+            : widget.similarHasMore;
+        final slots = tabItems == 0
+            ? animeWitcherExtraTabPreviewSlots
+            : (hasMore || tabItems > animeWitcherExtraTabPreviewSlots
+                      ? animeWitcherExtraTabPreviewItemsWhenMore + 1
+                      : tabItems)
+                  .clamp(1, animeWitcherExtraTabPreviewSlots);
+        final rows = (slots / columns).ceil().clamp(1, 2);
+        final gridHeight = detailsExtraTabBodyHeight(
+          context,
+          bodyWidth,
+          rows: rows,
         );
+        // The height of the tab on screen, not of the tallest of the three.
+        // Sized to the tallest, a page whose characters fill two rails left
+        // that much empty room under a single row of similar anime, and
+        // everything below — the comments — sat a screen further down than
+        // it looked like it should.
+        final bodyHeight =
+            _tabController.index == detailsExtraCharactersTabIndex
+            ? _charactersTabBodyHeight(context, gridHeight, maxWidth: bodyWidth)
+            : gridHeight;
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(

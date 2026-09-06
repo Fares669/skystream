@@ -39,7 +39,6 @@ import "widgets/details_layout_widgets.dart";
 import "widgets/details_desktop_hero.dart";
 import "widgets/premium_details_widgets.dart";
 import "widgets/details_extra_tabs.dart";
-import "widgets/details_tab_swipe.dart";
 import "widgets/anime_information_section.dart";
 import "adult_content_warning.dart";
 import "../../../shared/widgets/expandable_text.dart";
@@ -49,6 +48,12 @@ import 'package:animewitcher/l10n/generated/app_localizations.dart';
 
 import 'package:animewitcher/core/utils/localized_text.dart';
 import 'package:animewitcher/core/services/notification_service.dart';
+import 'widgets/details_hero_actions.dart';
+import 'widgets/next_airing_chip.dart';
+import 'widgets/details_comments_preview.dart';
+import 'details_ratings.dart';
+import 'widgets/details_rating_actions.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Keeps a details tab's scrollable (and its poster Image states) alive
 /// while the other tab is showing. This matches View All, which stays
@@ -189,18 +194,9 @@ class DetailsScreen extends ConsumerStatefulWidget {
 
 class _DetailsScreenState extends ConsumerState<DetailsScreen>
     with TickerProviderStateMixin {
-  static const double _tabSwipeDistanceThreshold = 72;
-  static const double _tabSwipeVelocityThreshold = 650;
-  static const Duration _tabTransitionDuration = Duration(milliseconds: 260);
-
   bool _didTriggerAutoPlay = false;
   int _selectedDetailsTab = 0;
-  double _tabSwipeDistance = 0;
-  bool _tabSwipeStartedAtBackEdge = false;
   final GlobalKey _extraTabsKey = GlobalKey();
-  Offset _tabSlideFrom = Offset.zero;
-  late final AnimationController _tabTransitionController;
-  late final Animation<double> _tabTransitionAnimation;
   late final TabController _detailsTabController;
 
   static const String _removeLibraryAction = '__remove_from_library__';
@@ -211,6 +207,14 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     required bool isFavorite,
     required dynamic libraryNotifier,
     required Color foregroundColor,
+
+    /// The desktop page reads the comments themselves at its foot, so an
+    /// icon that only says they exist would be the lesser way in.
+    bool includeComments = true,
+
+    /// The desktop hero spells the list out on a capsule of its own, so the
+    /// same menu behind a bookmark glyph would be the second way to say it.
+    bool includeLibraryMenu = true,
   }) {
     const favoriteRed = Color(0xFFFF3B30);
     final colors = Theme.of(context).colorScheme;
@@ -219,7 +223,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
         libraryNotifier.itemCategory(item.url) as LibraryCategory?;
 
     return <AppleLiquidGlassToolbarButton>[
-      if (commentTarget != null)
+      if (includeComments && commentTarget != null)
         AppleLiquidGlassToolbarButton(
           tooltip: appText(context, english: 'Comments', arabic: 'التعليقات'),
           icon: Icons.chat_bubble_outline_rounded,
@@ -247,22 +251,188 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
           await libraryNotifier.setFavorite(item, !isFavorite);
         },
       ),
-      AppleLiquidGlassToolbarButton(
-        tooltip: appText(context, english: 'Choose list', arabic: 'اختر قائمة'),
-        icon: currentCategory == null
-            ? Icons.bookmark_border_rounded
-            : _libraryCategoryIcon(currentCategory),
-        systemImage: currentCategory == null
-            ? 'bookmark'
-            : _libraryCategorySystemImage(currentCategory),
-        color: currentCategory != null ? colors.primary : foregroundColor,
-        menuTintColor: colors.primary,
-        onPressed: null,
-        selectedMenuValue: currentCategory?.storageKey,
-        menuItems: _libraryCategoryMenuItems(context, item, currentCategory),
-        onMenuSelected: (value) => _handleLibraryMenuSelection(item, value),
-      ),
+      if (includeLibraryMenu)
+        AppleLiquidGlassToolbarButton(
+          tooltip: appText(
+            context,
+            english: 'Choose list',
+            arabic: 'اختر قائمة',
+          ),
+          icon: currentCategory == null
+              ? Icons.bookmark_border_rounded
+              : _libraryCategoryIcon(currentCategory),
+          systemImage: currentCategory == null
+              ? 'bookmark'
+              : _libraryCategorySystemImage(currentCategory),
+          color: currentCategory != null ? colors.primary : foregroundColor,
+          menuTintColor: colors.primary,
+          onPressed: null,
+          selectedMenuValue: currentCategory?.storageKey,
+          menuItems: _libraryCategoryMenuItems(context, item, currentCategory),
+          onMenuSelected: (value) => _handleLibraryMenuSelection(item, value),
+        ),
     ];
+  }
+
+  /// The row that sits over the banner on a desktop details page.
+  ///
+  /// Playing the episode a viewer is up to is the reason the page exists, so
+  /// it is a filled pill and the first thing on the line. The list this anime
+  /// is in reads as a capsule saying which one, since a bookmark glyph alone
+  /// never said whether it meant "saved" or "watching". The rest stay as
+  /// glass buttons beside them.
+  Widget _buildDesktopHeroActionRow(
+    BuildContext context,
+    MultimediaItem item, {
+    required bool isFavorite,
+    required dynamic libraryNotifier,
+    required Color foregroundColor,
+    Color? fallbackColor,
+  }) {
+    final LibraryCategory? category =
+        libraryNotifier.itemCategory(item.url) as LibraryCategory?;
+    final details = ref
+        .watch(detailsControllerProvider(widget.item.url))
+        .details
+        .value;
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        DetailsHeroPlayPill(
+          item: item,
+          details: details,
+          itemUrl: widget.item.url,
+        ),
+        PopupMenuButton<String>(
+          tooltip: appText(
+            context,
+            english: 'Choose list',
+            arabic: 'اختر قائمة',
+          ),
+          padding: EdgeInsets.zero,
+          offset: const Offset(0, 8),
+          color: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          shape: const RoundedRectangleBorder(),
+          itemBuilder: (menuContext) => [
+            PopupMenuItem<String>(
+              enabled: false,
+              padding: EdgeInsets.zero,
+              child: BlurredMenuPanel(
+                items: _libraryCategoryMenuItems(context, item, category),
+                selectedValue: category?.storageKey ?? '',
+                tint: Theme.of(context).colorScheme.onSurface,
+                fallbackIcon: Icons.bookmark_border_rounded,
+                onPick: (value) {
+                  Navigator.of(menuContext).pop();
+                  _handleLibraryMenuSelection(item, value);
+                },
+              ),
+            ),
+          ],
+          child: DetailsHeroPill(
+            fallbackColor: fallbackColor,
+            label: category == null
+                ? appText(context, english: 'Add to list', arabic: 'أضف لقائمة')
+                : _libraryCategoryLabel(context, category),
+            icon: category == null
+                ? Icons.bookmark_border_rounded
+                : _libraryCategoryIcon(category),
+            selected: category != null,
+            trailing: Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 20,
+              color: category != null
+                  ? Theme.of(context).colorScheme.primary
+                  : foregroundColor,
+            ),
+          ),
+        ),
+        // Each on its own rather than sharing a capsule: they do unrelated
+        // things, and a viewer reaching for one is not choosing from a set.
+        DetailsHeroIconButton(
+          icon: Icons.star_outline_rounded,
+          tooltip: appText(context, english: 'Rate this', arabic: 'قيّم'),
+          foregroundColor: foregroundColor,
+          fallbackColor: fallbackColor,
+          onPressed: () => openAnimeRatingDialog(
+            context,
+            ref,
+            ratings: AnimeDetailsRatings.fromItem(item),
+          ),
+        ),
+        DetailsHeroIconButton(
+          icon: Icons.rate_review_outlined,
+          tooltip: appText(context, english: 'Reviews', arabic: 'المراجعات'),
+          foregroundColor: foregroundColor,
+          fallbackColor: fallbackColor,
+          onPressed: () => openAnimeReviews(
+            context,
+            ref,
+            item: item,
+            ratings: AnimeDetailsRatings.fromItem(item),
+          ),
+        ),
+        if (_firstTrailerUrl(item) != null)
+          DetailsHeroIconButton(
+            icon: Icons.movie_outlined,
+            tooltip: appText(
+              context,
+              english: 'Watch trailer',
+              arabic: 'العرض الدعائي',
+            ),
+            foregroundColor: foregroundColor,
+            fallbackColor: fallbackColor,
+            onPressed: () => _openTrailer(context, item),
+          ),
+        for (final button in _buildDetailsHeaderButtons(
+          context,
+          item,
+          isFavorite: isFavorite,
+          libraryNotifier: libraryNotifier,
+          foregroundColor: foregroundColor,
+          includeLibraryMenu: false,
+          includeComments: false,
+        ))
+          DetailsHeroIconButton(
+            icon: button.icon,
+            tooltip: button.tooltip ?? '',
+            foregroundColor: button.color ?? foregroundColor,
+            fallbackColor: fallbackColor,
+            onPressed: button.onPressed ?? () {},
+          ),
+      ],
+    );
+  }
+
+  /// The trailer this anime leads with, if it has one.
+  String? _firstTrailerUrl(MultimediaItem item) {
+    final trailers =
+        ref
+            .watch(detailsControllerProvider(widget.item.url))
+            .trailers
+            .asData
+            ?.value ??
+        item.trailers ??
+        const <Trailer>[];
+    for (final trailer in trailers) {
+      final url = trailer.url.trim();
+      if (url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
+  Future<void> _openTrailer(BuildContext context, MultimediaItem item) async {
+    final url = _firstTrailerUrl(item);
+    if (url == null) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Widget _buildDetailsHeaderActions(
@@ -272,9 +442,11 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     required dynamic libraryNotifier,
     required Color foregroundColor,
     Color? fallbackColor,
+    bool includeLibraryMenu = true,
+    bool includeComments = true,
   }) {
     return AppleLiquidGlassActionGroup(
-      height: 46,
+      height: kDetailsHeroActionHeight,
       fallbackColor: fallbackColor,
       children: _buildDetailsHeaderButtons(
         context,
@@ -282,6 +454,8 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
         isFavorite: isFavorite,
         libraryNotifier: libraryNotifier,
         foregroundColor: foregroundColor,
+        includeLibraryMenu: includeLibraryMenu,
+        includeComments: includeComments,
       ),
     );
   }
@@ -430,104 +604,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     _loadEpisodesIfNeeded(index);
     if (index == _selectedDetailsTab) return;
 
-    // Desktop still cross-fades tab bodies. Mobile uses a native TabBarView
-    // so the pages track the finger; skip the fade there.
-    if (context.isTabletOrLarger) {
-      final isRtl = Directionality.of(context) == TextDirection.rtl;
-      final entersFromLeft = isRtl ? index == 1 : index == 0;
-      _tabSlideFrom = Offset(entersFromLeft ? -0.16 : 0.16, 0);
-      _tabTransitionController.forward(from: 0);
-    }
     setState(() => _selectedDetailsTab = index);
-  }
-
-  void _switchDetailsTab(int targetTab) {
-    if (targetTab == _detailsTabController.index) return;
-    _loadEpisodesIfNeeded(targetTab);
-    _detailsTabController.animateTo(targetTab);
-  }
-
-  bool _isPointerInExtraTabs(Offset globalPosition) {
-    return ignoreDetailsEpisodesSwipe(
-      selectedDetailsTab: _detailsTabController.index,
-      pointerInExtraTabsBounds: _extraTabsContainsGlobalPoint(globalPosition),
-    );
-  }
-
-  bool _extraTabsContainsGlobalPoint(Offset globalPosition) {
-    final extraContext = _extraTabsKey.currentContext;
-    if (extraContext == null) return false;
-    final box = extraContext.findRenderObject();
-    if (box is! RenderBox || !box.hasSize) return false;
-    final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
-  }
-
-  Widget _buildDetailsTabSwipeRegion({
-    required Widget child,
-    required bool enabled,
-  }) {
-    if (!enabled) return child;
-
-    return RawGestureDetector(
-      behavior: HitTestBehavior.translucent,
-      gestures: <Type, GestureRecognizerFactory>{
-        DetailsEpisodesSwipeGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<
-              DetailsEpisodesSwipeGestureRecognizer
-            >(
-              () => DetailsEpisodesSwipeGestureRecognizer(
-                shouldIgnore: _isPointerInExtraTabs,
-              ),
-              (DetailsEpisodesSwipeGestureRecognizer instance) {
-                instance
-                  ..onStart = (details) {
-                    _tabSwipeDistance = 0;
-                    _tabSwipeStartedAtBackEdge =
-                        details.globalPosition.dx <= 24;
-                  }
-                  ..onUpdate = (details) {
-                    if (_tabSwipeStartedAtBackEdge) return;
-                    _tabSwipeDistance += details.primaryDelta ?? 0;
-                  }
-                  ..onCancel = () {
-                    _tabSwipeDistance = 0;
-                    _tabSwipeStartedAtBackEdge = false;
-                  }
-                  ..onEnd = (details) {
-                    final distance = _tabSwipeDistance;
-                    final velocity = details.primaryVelocity ?? 0;
-                    final ignored = _tabSwipeStartedAtBackEdge;
-                    _tabSwipeDistance = 0;
-                    _tabSwipeStartedAtBackEdge = false;
-                    if (ignored) return;
-
-                    final swipeLeft =
-                        distance <= -_tabSwipeDistanceThreshold ||
-                        velocity <= -_tabSwipeVelocityThreshold;
-                    final swipeRight =
-                        distance >= _tabSwipeDistanceThreshold ||
-                        velocity >= _tabSwipeVelocityThreshold;
-
-                    final isRtl =
-                        Directionality.of(context) == TextDirection.rtl;
-                    final swipeTowardEpisodes = isRtl ? swipeRight : swipeLeft;
-                    final swipeTowardDetails = isRtl ? swipeLeft : swipeRight;
-
-                    if (swipeTowardEpisodes && _selectedDetailsTab != 1) {
-                      _switchDetailsTab(1);
-                    } else if (swipeTowardDetails && _selectedDetailsTab != 0) {
-                      _switchDetailsTab(0);
-                    }
-                  };
-              },
-            ),
-      },
-      child: child,
-    );
   }
 
   Future<void> _copyAnimeTitle(BuildContext context, String title) async {
@@ -866,15 +943,6 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
   @override
   void initState() {
     super.initState();
-    _tabTransitionController = AnimationController(
-      vsync: this,
-      duration: _tabTransitionDuration,
-      value: 1,
-    );
-    _tabTransitionAnimation = CurvedAnimation(
-      parent: _tabTransitionController,
-      curve: Curves.easeOutCubic,
-    );
     _detailsTabController = TabController(
       length: 2,
       vsync: this,
@@ -903,7 +971,6 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     _detailsTabController
       ..removeListener(_handleDetailsTabControllerTick)
       ..dispose();
-    _tabTransitionController.dispose();
     super.dispose();
   }
 
@@ -1042,12 +1109,19 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
         fallbackColor: Theme.of(context).colorScheme.surfaceContainerHigh,
       );
       return Scaffold(
-        appBar: _buildPinnedDetailsAppBar(
-          context,
-          item: item,
-          isFavorite: isFavorite,
-          libraryNotifier: libraryNotifier,
-        ),
+        // A wide window waits behind the same bare bar the page itself uses:
+        // one back button over the artwork, nothing else. Handed the handset
+        // header instead, the desktop page opened on a row of buttons that
+        // vanished a moment later, once the details arrived.
+        extendBodyBehindAppBar: isLarge,
+        appBar: isLarge
+            ? _buildDesktopChromeAppBar(context)
+            : _buildPinnedDetailsAppBar(
+                context,
+                item: item,
+                isFavorite: isFavorite,
+                libraryNotifier: libraryNotifier,
+              ),
         body: Center(
           child: AppLoadingIndicator(
             color: Theme.of(context).colorScheme.primary,
@@ -1573,6 +1647,41 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     );
   }
 
+  /// The bare bar the desktop page wears: a back button over the artwork and
+  /// nothing else, since the anime's own actions sit under its title.
+  PreferredSizeWidget _buildDesktopChromeAppBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(kToolbarHeight),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          automaticallyImplyLeading: false,
+          leadingWidth: appleUsesPersistentLiquidGlassHeader ? 0 : 64,
+          leading: appleUsesPersistentLiquidGlassHeader
+              ? null
+              : Padding(
+                  padding: EdgeInsets.only(
+                    left: 8 + windowControlsLeadingInset,
+                  ),
+                  child: AppleLiquidGlassBackButton(
+                    size: 46,
+                    foregroundColor: theme.colorScheme.onSurface,
+                    fallbackColor: isDark ? Colors.black45 : Colors.white54,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+          actions: const <Widget>[],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDesktopLayout(
     BuildContext context,
     MultimediaItem item,
@@ -1603,105 +1712,68 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     );
 
     return Scaffold(
-      bottomNavigationBar: selectedEpisodeCount == 0 || _selectedDetailsTab != 1
+      // One page now, so this shows whenever episodes are selected rather
+      // than only while the episodes tab was the one on screen.
+      bottomNavigationBar: selectedEpisodeCount == 0
           ? null
           : _buildEpisodeSelectionBar(context, selectedEpisodeCount),
-      extendBodyBehindAppBar: false,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            automaticallyImplyLeading: false,
-            leadingWidth: appleUsesPersistentLiquidGlassHeader ? 0 : 64,
-            leading: appleUsesPersistentLiquidGlassHeader
-                ? null
-                : Padding(
-                    padding: EdgeInsets.only(
-                      left: 8 + windowControlsLeadingInset,
-                    ),
-                    child: AppleLiquidGlassBackButton(
-                      size: 46,
-                      foregroundColor: textColor,
-                      fallbackColor: isDark ? Colors.black45 : Colors.white54,
-                      onPressed: () => Navigator.of(context).maybePop(),
-                    ),
-                  ),
-            // The actions live under the anime's metadata instead, clear of
-            // the window's caption buttons.
-            actions: const <Widget>[],
-          ),
+      // The banner starts at the top edge of the window, with the back button
+      // and the two tabs floating over it. They used to sit in a bar of their
+      // own above the artwork, which cut a black strip across the top of
+      // every anime.
+      extendBodyBehindAppBar: true,
+      appBar: _buildDesktopChromeAppBar(context),
+      body: DetailsDesktopHero(
+        displayItem: item,
+        baseItem: widget.item,
+        details: item,
+        detailsState: detailsState,
+        isMovie: isMovie,
+        itemUrl: widget.item.url,
+        onRefresh: _refreshDetails,
+        onPosterTap: () => _showPosterViewer(context, item),
+        heroActions: _buildDesktopHeroActionRow(
+          context,
+          item,
+          isFavorite: isFavorite,
+          libraryNotifier: libraryNotifier,
+          foregroundColor: textColor,
+          fallbackColor: isDark ? Colors.black45 : Colors.white54,
         ),
-      ),
-      body: Column(
-        children: [
-          _buildDetailsPageTabs(context, episodesState),
-          Expanded(
-            child: _buildDetailsTabSwipeRegion(
-              enabled: true,
-              child: Directionality(
-                textDirection: _detailsTabsTextDirection(context),
-                child: DetailsDesktopTabSwitcher(
-                  selectedIndex: _selectedDetailsTab,
-                  transition: _tabTransitionAnimation,
-                  slideFrom: _tabSlideFrom,
-                  detailsBuilder: (context) => DetailsDesktopHero(
-                    displayItem: item,
-                    baseItem: widget.item,
-                    details: item,
-                    detailsState: detailsState,
-                    isMovie: isMovie,
-                    itemUrl: widget.item.url,
-                    onRefresh: _refreshDetails,
-                    onPosterTap: () => _showPosterViewer(context, item),
-                    heroActions: appleUsesPersistentLiquidGlassHeader
-                        ? null
-                        : _buildDetailsHeaderActions(
-                            context,
-                            item,
-                            isFavorite: isFavorite,
-                            libraryNotifier: libraryNotifier,
-                            foregroundColor: textColor,
-                            fallbackColor: isDark
-                                ? Colors.black45
-                                : Colors.white54,
-                          ),
-                    child: _buildDesktopDetailsContentBelow(
-                      context,
-                      item,
-                      detailsState,
-                      castState,
-                      trailersState,
-                      relatedState,
-                      recommendationsState,
-                      l10n,
-                    ),
-                  ),
-                  episodesBuilder: (context) {
-                    return MouseDragRefreshIndicator(
-                      onRefresh: _refreshDetails,
-                      child: SingleChildScrollView(
-                        key: const PageStorageKey<String>(
-                          'desktop-details-episodes-tab',
-                        ),
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(60, 24, 60, 100),
-                        child: _buildDesktopEpisodesContent(
-                          context,
-                          item,
-                          episodesState,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+        story: _buildHeroStory(context, item, l10n),
+        nextAiring: item.nextAiring == null
+            ? null
+            : NextAiringChip(nextAiring: item.nextAiring!),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The rating warning sits with the episodes rather than at the
+            // top of the particulars further down: it is about what is in
+            // them, and this is where they start.
+            if (shouldShowAdultContentWarning(item)) ...[
+              const AdultContentWarningBanner(),
+              const SizedBox(height: 20),
+            ],
+            // The episodes follow the synopsis on the same page rather than
+            // behind a tab. Picking one is the reason for the page, and a
+            // viewer who has just read what the anime is about should not
+            // have to go looking for a second screen to start it.
+            _buildDesktopEpisodesContent(context, item, episodesState),
+            const SizedBox(height: 44),
+            _buildDesktopDetailsContentBelow(
+              context,
+              item,
+              detailsState,
+              castState,
+              trailersState,
+              relatedState,
+              recommendationsState,
+              l10n,
             ),
-          ),
-        ],
+            const SizedBox(height: 32),
+            DetailsCommentsPreview(item: item),
+          ],
+        ),
       ),
     );
   }
@@ -1838,6 +1910,76 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     );
   }
 
+  /// The synopsis as it reads under the hero actions: the text itself and the
+  /// genres, with nothing drawn around them.
+  ///
+  /// The card the page used further down had a panel and a border, which is
+  /// right in a column of other cards and wrong as the first thing under a
+  /// row of buttons on the artwork.
+  Widget _buildHeroStory(
+    BuildContext context,
+    MultimediaItem item,
+    AppLocalizations l10n,
+  ) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final genres = _normalizedGenres(item);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExpandableText(
+          text: item.description ?? l10n.noDescription,
+          maxLines: 4,
+          // Over artwork, among white words: the accent shouted.
+          toggleColor: colors.onSurface,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: colors.onSurface.withValues(alpha: 0.86),
+            height: 1.6,
+          ),
+        ),
+        if (genres.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              // The same glass as the buttons above them. Solid accent, a
+              // row of them read as the loudest thing on the artwork while
+              // saying the least.
+              for (final genre in genres)
+                Material(
+                  color: kDetailsHeroGlassFallback,
+                  shape: StadiumBorder(
+                    side: BorderSide(
+                      color: colors.onSurfaceVariant.withValues(alpha: 0.16),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => _openGenreResults(context, genre),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 7,
+                      ),
+                      child: Text(
+                        genre,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildSynopsisAndGenres(
     BuildContext context,
     MultimediaItem item,
@@ -1943,65 +2085,11 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 900;
-            final infoColumn = <Widget>[
-              if (item.nextAiring != null) ...[
-                NextAiringWidget(nextAiring: item.nextAiring!),
-                const SizedBox(height: 20),
-              ],
-              AnimeInformationSection(item: item),
-            ];
-            final synopsisColumn = <Widget>[
-              DetailsCountdownAndStory(
-                item: item,
-                showCountdown: false,
-                storyCard: _buildSynopsisAndGenres(context, item, l10n),
-              ),
-            ];
-
-            if (isWide) {
-              // Keep the newer desktop details layout, but avoid intrinsic
-              // measurement here: descendants can contain LayoutBuilder, which
-              // throws in debug when measured by IntrinsicHeight.
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // In RTL this first column is the right half. Keep the next
-                  // episode countdown directly above the anime information.
-                  Expanded(
-                    flex: 5,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: infoColumn,
-                    ),
-                  ),
-                  const SizedBox(width: 28),
-                  Expanded(
-                    flex: 6,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: synopsisColumn,
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ...infoColumn,
-                const SizedBox(height: 28),
-                ...synopsisColumn,
-              ],
-            );
-          },
-        ),
-        ..._buildTrailerSections(context, item, trailersState),
+        // The score panel, the synopsis and the countdown used to sit here.
+        // All three are up in the hero now — the scores beside the buttons,
+        // the story under them and the wait for the next episode on its own
+        // line — so what is left is the anime's own particulars.
+        AnimeInformationSection(item: item),
         const SizedBox(height: 24),
         _buildDetailsExtraTabs(
           context,
@@ -2011,7 +2099,8 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen>
           recommendationsState,
           contentPadding: EdgeInsets.zero,
         ),
-        const SizedBox(height: 100),
+        // No tail here: this was the foot of the page when these tabs ended
+        // it, and the comments follow them now.
       ],
     );
   }

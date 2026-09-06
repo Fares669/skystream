@@ -8,20 +8,20 @@ import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/utils/artwork_quality.dart';
 import '../../../../core/utils/image_fallbacks.dart';
 import '../../../../shared/widgets/thumbnail_error_placeholder.dart';
+import '../../../../shared/widgets/fallback_poster_image.dart';
 import 'premium_details_widgets.dart';
+import 'details_hero_actions.dart';
 
 import 'package:animewitcher/core/utils/localized_text.dart';
 import 'package:animewitcher/core/services/notification_service.dart';
-import '../../../../shared/widgets/fallback_poster_image.dart';
 
 /// Immersive desktop/TV hero for non-TMDB details.
 ///
-/// Layout: full-page banner-as-background for the Details tab, with the
-/// title and metadata sitting beside the poster like the handset header.
-/// Play /
-/// Resume action is intentionally omitted on desktop; on wide screens
-/// playback is driven from the Episodes tab, matching the mobile app
-/// pattern. [child] renders the rest of the Details tab below the hero row.
+/// The artwork is the page: it runs full width from the top of the window,
+/// and the anime's name, its numbers and the row of actions sit low over it
+/// where the picture has already darkened, rather than in a panel beside a
+/// poster. Everything else about the page follows below in [child], reading
+/// on the solid background the banner fades into.
 class DetailsDesktopHero extends ConsumerWidget {
   const DetailsDesktopHero({
     super.key,
@@ -34,6 +34,8 @@ class DetailsDesktopHero extends ConsumerWidget {
     required this.onRefresh,
     this.onPosterTap,
     this.heroActions,
+    this.story,
+    this.nextAiring,
     // Kept for backwards compatibility with callers that still pass it,
     // but it's no longer used now that [DetailsActionButtons] is removed
     // from the desktop layout.
@@ -64,12 +66,22 @@ class DetailsDesktopHero extends ConsumerWidget {
   final Future<void> Function() onRefresh;
 
   /// Opens the fullscreen poster viewer at the largest available artwork.
+  /// Reached by tapping the anime's name, which is what stands where the
+  /// poster used to.
   final VoidCallback? onPosterTap;
 
   /// Actions for this anime, shown beneath its metadata. They used to sit in
   /// the toolbar, where the window's own caption buttons are painted over the
   /// same corner.
   final Widget? heroActions;
+
+  /// The synopsis, which follows the actions rather than waiting in a card
+  /// further down the page: it is the first thing a viewer reads to decide
+  /// whether to press the button above it.
+  final Widget? story;
+
+  /// When the next episode lands, for a series still airing.
+  final Widget? nextAiring;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -90,228 +102,210 @@ class DetailsDesktopHero extends ConsumerWidget {
         ) ??
         '';
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // ── Layer 1: Backdrop image with left-fade ShaderMask ──
-        Positioned.fill(
-          child: ShaderMask(
-            shaderCallback: (rect) {
-              return LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  scaffoldColor,
-                  scaffoldColor.withValues(alpha: 0.85),
-                  scaffoldColor.withValues(alpha: 0.55),
-                  scaffoldColor.withValues(alpha: 0.25),
-                  scaffoldColor.withValues(alpha: 0.08),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-              ).createShader(rect);
-            },
-            blendMode: BlendMode.dstOut,
-            child: ArtworkDecode(
-              paintedWidth: MediaQuery.sizeOf(context).width,
-              builder: (BuildContext context, int? decodeWidth) =>
-                  CachedNetworkImage(
-                    imageUrl: backdropUrl,
-                    fit: BoxFit.cover,
-                    alignment: Alignment.centerRight,
-                    memCacheWidth: decodeWidth,
-                    filterQuality: FilterQuality.medium,
-                    errorWidget: (_, _, _) {
-                      if (providedBannerUrl != null &&
-                          posterUrl != null &&
-                          providedBannerUrl != posterUrl) {
-                        return CachedNetworkImage(
-                          imageUrl: posterUrl,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.centerRight,
-                          memCacheWidth: decodeWidth,
-                          filterQuality: FilterQuality.medium,
-                          errorWidget: (_, _, _) => ThumbnailErrorPlaceholder(
-                            label: displayItem.title,
-                            isBackdrop: true,
-                          ),
-                        );
-                      }
-                      return ThumbnailErrorPlaceholder(
-                        label: displayItem.title,
-                        isBackdrop: true,
-                      );
-                    },
-                  ),
-            ),
-          ),
-        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // How far down the actions sit. Enough of the picture is left above
+        // them to read as a frame from the show rather than a header image,
+        // and enough room below for the synopsis to start on the same screen.
+        final heroBand = (constraints.maxHeight * 0.56).clamp(300.0, 560.0);
 
-        // ── Layer 2: Left-to-right gradient overlay ──
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  scaffoldColor,
-                  scaffoldColor.withValues(alpha: 0.85),
-                  scaffoldColor.withValues(alpha: 0.55),
-                  scaffoldColor.withValues(alpha: 0.25),
-                  scaffoldColor.withValues(alpha: 0.08),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-              ),
-            ),
-          ),
-        ),
-
-        // ── Layer 3: Bottom-to-top gradient (subtle — keeps banner visible
-        //    across the entire page, with a faint darken near the top for
-        //    text legibility). The banner is meant to read as the page's
-        //    full-bleed background, not a fixed hero zone, so this layer
-        //    fades over a much longer stretch than the previous variant.
-        //    Cards & panels painted on top of the scroll content still read
-        //    correctly thanks to their own opaque surfaces.
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [
-                  scaffoldColor.withValues(alpha: 0.35),
-                  scaffoldColor.withValues(alpha: 0.30),
-                  scaffoldColor.withValues(alpha: 0.25),
-                  scaffoldColor.withValues(alpha: 0.20),
-                  scaffoldColor.withValues(alpha: 0.10),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.20, 0.40, 0.60, 0.80, 1.0],
-              ),
-            ),
-          ),
-        ),
-
-        // ── Layer 4: Scrollable content ──
-        Positioned.fill(
-          child: MouseDragRefreshIndicator(
-            onRefresh: onRefresh,
-            child: SingleChildScrollView(
-              key: const PageStorageKey<String>('desktop-details-info-tab'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 60),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Poster on LEFT (mobile-style fixed-left anchor) +
-                  //    compact title and metadata to the right of it.
-                  //    Play/Resume ("آخر حلقة") action is intentionally
-                  //    omitted on desktop per the desktop layout pass — the
-                  //    user's media flow on wide screens is driven from
-                  //    the episode grid below, mirroring the mobile app.
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (posterUrl != null && posterUrl.isNotEmpty) ...[
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: onPosterTap,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: SizedBox(
-                                width: 200,
-                                height: 300,
-                                child: ArtworkDecode(
-                                  paintedWidth: 200,
-                                  builder:
-                                      (
-                                        BuildContext context,
-                                        int? decodeWidth,
-                                      ) => FallbackPosterImage(
-                                        imageUrl: posterUrl,
-                                        malId: displayItem.artworkLookupMalId,
-                                        title: displayItem.artworkLookupTitle,
-                                        fit: BoxFit.cover,
-                                        memCacheWidth: decodeWidth,
-                                        filterQuality: FilterQuality.medium,
-                                        placeholder: (_) => ColoredBox(
-                                          color: theme
-                                              .colorScheme
-                                              .surfaceContainerHighest,
-                                        ),
-                                        errorWidget: (_) =>
-                                            ThumbnailErrorPlaceholder(
-                                              label: displayItem.title,
-                                            ),
-                                      ),
-                                ),
+        return MouseDragRefreshIndicator(
+          onRefresh: onRefresh,
+          child: SingleChildScrollView(
+            key: const PageStorageKey<String>('desktop-details-info-tab'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The artwork and what sits on it are one piece of the page,
+                // so they leave together as it is scrolled. Pinned behind the
+                // scroll the picture never went anywhere, and the synopsis
+                // and episodes read as if they were sliding over a window.
+                Stack(
+                  children: [
+                    // The picture, behind the words and as tall as they make
+                    // this section.
+                    Positioned.fill(
+                      child: ArtworkDecode(
+                        paintedWidth: MediaQuery.sizeOf(context).width,
+                        builder: (BuildContext context, int? decodeWidth) =>
+                            FallbackPosterImage(
+                              imageUrl: backdropUrl,
+                              // Wide art, looked up the way Harbor does when
+                              // the catalog has none and the viewer asked for
+                              // other sources: AniList's banner, then what
+                              // AniZip knows of TheTVDB and Kitsu.
+                              preferBanner: true,
+                              malId: displayItem.artworkLookupMalId,
+                              title: displayItem.artworkLookupTitle,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              memCacheWidth: decodeWidth,
+                              filterQuality: FilterQuality.medium,
+                              placeholder: (_) => ColoredBox(
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest,
                               ),
+                              errorWidget: (_) {
+                                if (providedBannerUrl != null &&
+                                    posterUrl != null &&
+                                    providedBannerUrl != posterUrl) {
+                                  return CachedNetworkImage(
+                                    imageUrl: posterUrl,
+                                    fit: BoxFit.cover,
+                                    alignment: Alignment.topCenter,
+                                    memCacheWidth: decodeWidth,
+                                    filterQuality: FilterQuality.medium,
+                                    errorWidget: (_, _, _) =>
+                                        ThumbnailErrorPlaceholder(
+                                          label: displayItem.title,
+                                          isBackdrop: true,
+                                        ),
+                                  );
+                                }
+                                return ThumbnailErrorPlaceholder(
+                                  label: displayItem.title,
+                                  isBackdrop: true,
+                                );
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 32),
-                        ],
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onLongPress: () => _copyAnimeTitle(context),
-                                  child: displayItem.logoUrl != null
-                                      ? ArtworkDecode(
-                                          paintedWidth: 320,
-                                          builder:
-                                              (
-                                                BuildContext context,
-                                                int? decodeWidth,
-                                              ) => CachedNetworkImage(
-                                                imageUrl: displayItem.logoUrl!,
-                                                height: 88,
-                                                alignment: Alignment.centerLeft,
-                                                fit: BoxFit.contain,
-                                                memCacheWidth: decodeWidth,
-                                                placeholder: (_, _) =>
-                                                    _buildTitle(textColor),
-                                                errorWidget: (_, _, _) =>
-                                                    _buildTitle(textColor),
-                                              ),
-                                        )
-                                      : _buildTitle(textColor),
-                                ),
-                                const SizedBox(height: 18),
-                                MetadataBar(
-                                  item: displayItem,
-                                  isLoading: detailsState is AsyncLoading,
-                                ),
-                                if (heroActions != null) ...[
-                                  const SizedBox(height: 20),
-                                  heroActions!,
-                                ],
-                              ],
-                            ),
+                      ),
+                    ),
+
+                    // The picture goes to ground before the page's own
+                    // content starts, so nothing below is read against art.
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              scaffoldColor.withValues(alpha: 0.15),
+                              scaffoldColor.withValues(alpha: 0.78),
+                              scaffoldColor,
+                            ],
+                            stops: const [0.0, 0.34, 0.62, 0.9],
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 60),
+                    // A lean toward the side the words are on, so a title
+                    // over a pale frame keeps its contrast without dimming
+                    // the whole shot.
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: AlignmentDirectional.centerStart,
+                            end: AlignmentDirectional.centerEnd,
+                            colors: [
+                              scaffoldColor.withValues(alpha: 0.72),
+                              scaffoldColor.withValues(alpha: 0.35),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.35, 0.72],
+                          ),
+                        ),
+                      ),
+                    ),
 
-                  // ── Content below hero (full width) ──
-                  child,
-                ],
-              ),
+                    // The words. This is the only child that is not
+                    // positioned, so it is what gives the section its size —
+                    // and a column is only as wide as its widest child, which
+                    // left the picture painted in a band the width of the
+                    // text with the window black either side of it. Full
+                    // width, so the artwork has the whole section to fill.
+                    SizedBox(
+                      width: double.infinity,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(60, heroBand, 60, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              // The poster is no longer in the hero, so the
+                              // name carries the way into the artwork viewer
+                              // rather than leaving it unreachable here.
+                              onTap: onPosterTap,
+                              onLongPress: () => _copyAnimeTitle(context),
+                              child: displayItem.logoUrl != null
+                                  ? ArtworkDecode(
+                                      paintedWidth: 420,
+                                      builder:
+                                          (
+                                            BuildContext context,
+                                            int? decodeWidth,
+                                          ) => CachedNetworkImage(
+                                            imageUrl: displayItem.logoUrl!,
+                                            height: 96,
+                                            // This widget takes a resolved
+                                            // alignment, so the start edge is
+                                            // worked out here.
+                                            alignment:
+                                                Directionality.of(context) ==
+                                                    TextDirection.rtl
+                                                ? Alignment.centerRight
+                                                : Alignment.centerLeft,
+                                            fit: BoxFit.contain,
+                                            memCacheWidth: decodeWidth,
+                                            placeholder: (_, _) =>
+                                                _buildTitle(textColor),
+                                            errorWidget: (_, _, _) =>
+                                                _buildTitle(textColor),
+                                          ),
+                                    )
+                                  : _buildTitle(textColor),
+                            ),
+                            const SizedBox(height: 16),
+                            MetadataBar(
+                              item: displayItem,
+                              isLoading: detailsState is AsyncLoading,
+                            ),
+                            const SizedBox(height: 12),
+                            DetailsHeroRatings(item: displayItem),
+                            if (heroActions != null) ...[
+                              const SizedBox(height: 24),
+                              heroActions!,
+                            ],
+                            if (nextAiring != null) ...[
+                              const SizedBox(height: 16),
+                              nextAiring!,
+                            ],
+                            if (story != null) ...[
+                              const SizedBox(height: 28),
+                              // Held to a readable measure rather than run to
+                              // the width of the window, where the eye loses
+                              // its way back to the start of the next line.
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 880,
+                                ),
+                                child: story!,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 44),
+
+                // Everything else about the anime, on solid ground.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(60, 0, 60, 60),
+                  child: child,
+                ),
+              ],
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -333,11 +327,13 @@ class DetailsDesktopHero extends ConsumerWidget {
       displayItem.title,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.start,
       style: TextStyle(
         color: textColor,
-        fontSize: 36,
+        fontSize: 44,
         fontWeight: FontWeight.bold,
-        height: 1.12,
+        height: 1.1,
+        letterSpacing: -0.5,
       ),
     );
   }

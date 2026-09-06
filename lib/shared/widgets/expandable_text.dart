@@ -7,12 +7,19 @@ class ExpandableText extends StatefulWidget {
   final TextStyle? style;
   final TextAlign? textAlign;
 
+  /// The colour of the show more / show less toggle.
+  ///
+  /// The accent is right in a card on the page's own background and loud on
+  /// artwork, where the words around it are white.
+  final Color? toggleColor;
+
   const ExpandableText({
     super.key,
     required this.text,
     this.maxLines = 4,
     this.style,
     this.textAlign,
+    this.toggleColor,
   });
 
   @override
@@ -71,10 +78,7 @@ class _ExpandableTextState extends State<ExpandableText> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTruncated = _recomputeIfNeeded(
-          constraints,
-          textDirection,
-        );
+        final isTruncated = _recomputeIfNeeded(constraints, textDirection);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,7 +145,7 @@ class _ExpandableTextState extends State<ExpandableText> {
                     child: Text(
                       _isExpanded ? l10n.showLess : l10n.showMore,
                       style: TextStyle(
-                        color: colorScheme.primary,
+                        color: widget.toggleColor ?? colorScheme.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: (widget.style?.fontSize ?? 14) * 0.9,
                       ),

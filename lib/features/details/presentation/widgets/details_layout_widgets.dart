@@ -10,12 +10,16 @@ import 'package:animewitcher/core/utils/episode_label.dart';
 import 'package:animewitcher/core/utils/episode_order.dart';
 import 'package:animewitcher/core/utils/layout_constants.dart';
 import 'package:animewitcher/shared/widgets/custom_widgets.dart';
+import 'package:animewitcher/shared/widgets/paged_rail.dart';
 
 import '../details_controller.dart';
 
 import 'package:animewitcher/core/extensions/extension_manager.dart';
 
 import 'episode_card.dart';
+import 'episode_view_mode.dart';
+import 'details_hero_actions.dart';
+import 'package:animewitcher/shared/widgets/apple_liquid_glass.dart';
 
 import 'package:animewitcher/core/providers/device_info_provider.dart';
 import 'package:animewitcher/core/utils/responsive_breakpoints.dart';
@@ -34,6 +38,50 @@ bool _shouldFilterEpisodesByDub(
     for (final episode in episodes)
       (serverName: episode.serverName, name: episode.name),
   ]);
+}
+
+/// What the play button should say for [itemUrl] right now.
+///
+/// "Play" until there is somewhere to pick up from, then "Resume", and either
+/// with the episode named after it — the season too, unless there is only one
+/// and naming it would be noise.
+///
+/// The desktop hero and the handset button row both put this on their own
+/// button, and a label that reads one way in one place and another way in the
+/// other would be its own small bug.
+String detailsPlayActionLabel(
+  BuildContext context,
+  WidgetRef ref, {
+  required MultimediaItem item,
+  required String itemUrl,
+}) {
+  final l10n = AppLocalizations.of(context)!;
+  final historyRepo = ref.watch(historyRepositoryProvider);
+  final targetEpisode = ref.watch(
+    detailsControllerProvider(itemUrl).select((s) => s.targetEpisode),
+  );
+  final isMovie = ref.watch(
+    detailsControllerProvider(itemUrl).select((s) => s.isMovie),
+  );
+  final seasonMap = ref.watch(
+    detailsControllerProvider(itemUrl).select((s) => s.seasonMap),
+  );
+
+  final position = targetEpisode != null
+      ? historyRepo.getEpisodePosition(
+          targetEpisode.url,
+          mainUrl: item.url,
+          season: targetEpisode.season,
+          episode: targetEpisode.episode,
+        )
+      : historyRepo.getPosition(item.url);
+
+  final label = position > 5000 ? l10n.resume : l10n.play;
+  if (targetEpisode == null || isMovie) return label;
+
+  return seasonMap.keys.length <= 1
+      ? l10n.playEpisodeOnly(label, targetEpisode.episode)
+      : l10n.playEpisode(label, targetEpisode.season, targetEpisode.episode);
 }
 
 class DetailsSeasonListWrapper extends ConsumerWidget {
@@ -142,21 +190,12 @@ class DetailsActionButtons extends HookConsumerWidget {
           )
         : historyRepo.getDuration(item.url);
 
-    final l10n = AppLocalizations.of(context)!;
-    final bool isResuming = pos > 5000;
-
-    String playLabel = isResuming ? l10n.resume : l10n.play;
-    if (targetEpisode != null && !isMovie) {
-      if (isSingleSeason) {
-        playLabel = l10n.playEpisodeOnly(playLabel, targetEpisode.episode);
-      } else {
-        playLabel = l10n.playEpisode(
-          playLabel,
-          targetEpisode.season,
-          targetEpisode.episode,
-        );
-      }
-    }
+    final playLabel = detailsPlayActionLabel(
+      context,
+      ref,
+      item: item,
+      itemUrl: itemUrl,
+    );
 
     final playBtn = CustomButton(
       isPrimary: true,
@@ -221,8 +260,9 @@ class DetailsActionButtons extends HookConsumerWidget {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 6,
-                backgroundColor: Theme.of(context).colorScheme.onSurface
-                    .withValues(alpha: 0.1),
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.1),
                 valueColor: AlwaysStoppedAnimation<Color>(
                   Theme.of(context).colorScheme.primary,
                 ),
@@ -309,8 +349,9 @@ class SliverDetailsDesktopEpisodeGrid extends ConsumerWidget {
               children: [
                 Text(
                   AppLocalizations.of(context)!.episodes,
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 DetailsEpisodeFilterBar(itemUrl: itemUrl),
               ],
@@ -491,8 +532,9 @@ class SliverDetailsEpisodeList extends ConsumerWidget {
               children: [
                 Text(
                   AppLocalizations.of(context)!.episodes,
-                  style: Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 DetailsEpisodeFilterBar(itemUrl: itemUrl),
               ],
@@ -524,7 +566,6 @@ class DetailsEpisodeFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detailsState = ref.watch(detailsControllerProvider(itemUrl));
-    final bool isAscending = detailsState.isAscending;
 
     final allEpisodes =
         detailsState.seasonMap[detailsState.selectedSeason] ?? [];
@@ -551,26 +592,34 @@ class DetailsEpisodeFilterBar extends ConsumerWidget {
             _buildLanguageToggle(context, ref, selectedDub),
             const SizedBox(width: 8),
           ],
-          Material(
-            color: Colors.transparent,
-            child: Ink(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
+          // The same capsule the view modes beside it wear: a grey rounded
+          // box next to two glass ones read as a control from another page.
+          AppleLiquidGlassSurface(
+            borderRadius: BorderRadius.circular(20),
+            interactive: true,
+            fallbackColor: kDetailsHeroGlassFallback,
+            fallbackBorder: BorderSide(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurfaceVariant.withValues(alpha: 0.12),
+            ),
+            child: Material(
+              color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(20),
                 onTap: () => ref
                     .read(detailsControllerProvider(itemUrl).notifier)
                     .toggleSort(),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Icon(
                     Icons.swap_vert_rounded,
                     size: 22,
-                    color: isAscending
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    // The same colour as the view-mode glyphs it sits beside.
+                    // Painting it in the accent while they stayed neutral made
+                    // one button of a row of four look like a different kind
+                    // of control.
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -648,16 +697,18 @@ class _LanguageButtonState extends State<_LanguageButton> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: widget.isSelected
-                ? Theme.of(context).colorScheme.primary
-                      .withValues(alpha: 40 / 255)
+                ? Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 40 / 255)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: _isFocused
                   ? Colors.white
                   : (widget.isSelected
-                        ? Theme.of(context).colorScheme.primary
-                              .withValues(alpha: 80 / 255)
+                        ? Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 80 / 255)
                         : Colors.transparent),
               width: _isFocused ? 2 : 1,
             ),
@@ -695,8 +746,9 @@ class DetailsChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.bodySmall
-            ?.copyWith(fontWeight: FontWeight.w500),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -801,8 +853,10 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
   Widget _buildEpisodeRow(
     List<Episode> episodes,
     int rowIndex,
-    int crossAxisCount,
-  ) {
+    int crossAxisCount, {
+    bool plain = false,
+    bool vertical = false,
+  }) {
     final startIndex = rowIndex * crossAxisCount;
     final endIndex = (startIndex + crossAxisCount).clamp(0, episodes.length);
     final rowEpisodes = episodes.sublist(startIndex, endIndex);
@@ -823,6 +877,8 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
                         key: ValueKey(rowEpisodes[index].url),
                         episode: rowEpisodes[index],
                         parentItem: parentItem,
+                        plain: plain,
+                        vertical: vertical,
                       )
                     : const SizedBox.shrink(),
               ),
@@ -867,55 +923,121 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
             children: [
               Text(
                 AppLocalizations.of(context)!.episodes,
-                style: Theme.of(context).textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              DetailsEpisodeFilterBar(itemUrl: itemUrl),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const EpisodeViewModeToggle(),
+                  DetailsEpisodeFilterBar(itemUrl: itemUrl),
+                ],
+              ),
             ],
           ),
         ),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final crossAxisCount = (constraints.maxWidth / 480).ceil().clamp(
-              1,
-              5,
-            );
-            final rowCount = (displayedEpisodes.length / crossAxisCount).ceil();
-
-            // Small lists remain compact. Large lists receive a bounded,
-            // independently scrollable viewport so ListView can recycle rows.
-            final viewportHeight = MediaQuery.sizeOf(context).height;
-            final availableHeight = (viewportHeight - 160)
-                .clamp(220.0, 820.0)
-                .toDouble();
-            final maximumHeight = (viewportHeight * 0.72)
-                .clamp(220.0, availableHeight)
-                .toDouble();
-            final desiredHeight =
-                (rowCount * 220.0) +
-                (rowCount > 1 ? (rowCount - 1) * 16.0 : 0.0);
-            final listHeight = desiredHeight < maximumHeight
-                ? desiredHeight
-                : maximumHeight;
-
-            return SizedBox(
-              height: listHeight,
-              child: Scrollbar(
-                child: ListView.separated(
-                  primary: false,
+        ValueListenableBuilder<EpisodeViewMode>(
+          valueListenable: episodeViewMode,
+          builder: (context, mode, _) {
+            if (mode == EpisodeViewMode.rail) {
+              // One row to flick along. Lazy by construction, so the length
+              // of the series costs nothing here.
+              // A rail rather than a bare horizontal list: a mouse cannot
+              // drag one of those, and a wheel over it scrolls the page
+              // behind instead — so the row could be seen and not moved.
+              // This is the same rail the home screen rows use, drag and all.
+              return SizedBox(
+                height: 268,
+                child: PagedRail(
+                  itemExtent: 316,
+                  itemCount: displayedEpisodes.length,
                   padding: EdgeInsets.zero,
-                  scrollCacheExtent: const ScrollCacheExtent.pixels(700),
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  itemCount: rowCount,
-                  separatorBuilder: (_, _) => const SizedBox(height: 16),
-                  itemBuilder: (context, rowIndex) => _buildEpisodeRow(
-                    displayedEpisodes,
-                    rowIndex,
-                    crossAxisCount,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: SizedBox(
+                      width: 300,
+                      child: EpisodeCard(
+                        key: ValueKey(displayedEpisodes[index].url),
+                        episode: displayedEpisodes[index],
+                        parentItem: parentItem,
+                        vertical: true,
+                        plain: true,
+                        showDescription: false,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              );
+            }
+
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                // One card to a row reads as a list; several reads as a wall
+                // of artwork. The same card either way, given more or less
+                // room to lay itself out in.
+                final crossAxisCount = mode == EpisodeViewMode.list
+                    ? 1
+                    : (constraints.maxWidth / 330).ceil().clamp(1, 6);
+                final rowCount = (displayedEpisodes.length / crossAxisCount)
+                    .ceil();
+
+                // Short and ordinary runs flow into the page, so the whole
+                // thing scrolls as one. A very long one keeps a viewport of
+                // its own: a thousand-episode series would otherwise build a
+                // thousand cards to show a dozen.
+                const flowLimit = 80;
+                if (displayedEpisodes.length <= flowLimit) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: rowIndex == rowCount - 1 ? 0 : 16,
+                          ),
+                          child: _buildEpisodeRow(
+                            displayedEpisodes,
+                            rowIndex,
+                            crossAxisCount,
+                            plain: true,
+                            vertical: mode == EpisodeViewMode.grid,
+                          ),
+                        ),
+                    ],
+                  );
+                }
+
+                final viewportHeight = MediaQuery.sizeOf(context).height;
+                final availableHeight = (viewportHeight - 160)
+                    .clamp(220.0, 820.0)
+                    .toDouble();
+                final maximumHeight = (viewportHeight * 0.72)
+                    .clamp(220.0, availableHeight)
+                    .toDouble();
+
+                return SizedBox(
+                  height: maximumHeight,
+                  child: Scrollbar(
+                    child: ListView.separated(
+                      primary: false,
+                      padding: EdgeInsets.zero,
+                      scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: rowCount,
+                      separatorBuilder: (_, _) => const SizedBox(height: 16),
+                      itemBuilder: (context, rowIndex) => _buildEpisodeRow(
+                        displayedEpisodes,
+                        rowIndex,
+                        crossAxisCount,
+                      ),
+                    ),
+                  ),
+                );
+              },
             );
           },
         ),

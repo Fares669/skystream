@@ -45,11 +45,37 @@ class EpisodeCard extends HookConsumerWidget {
   final MultimediaItem parentItem;
   final double? width;
 
+  /// Drops the panel and the outline, leaving the still and the words on the
+  /// page itself.
+  ///
+  /// A column of cards down a whole page is a column of boxes; read as a
+  /// list, the episodes want nothing drawn around them. Being chosen or
+  /// focused still fills the row, since that has to be visible.
+  final bool plain;
+
+  /// Whether the episode's own summary is shown under its title.
+  ///
+  /// A row to flick along has a fixed height, and a summary that runs to two
+  /// lines on one episode and none on the next would either overflow it or
+  /// leave it padded out for the worst case.
+  final bool showDescription;
+
+  /// Stacks the still above the words instead of setting them side by side.
+  ///
+  /// Side by side is right for a list read top to bottom, where the still is
+  /// a thumbnail beside the title. In a row to flick along or a wall of
+  /// cards, the still is the thing being looked at and wants the full width
+  /// of the card, with the title underneath it.
+  final bool vertical;
+
   const EpisodeCard({
     super.key,
     required this.episode,
     required this.parentItem,
     this.width,
+    this.plain = false,
+    this.vertical = false,
+    this.showDescription = true,
   });
 
   @override
@@ -298,6 +324,8 @@ class EpisodeCard extends HookConsumerWidget {
                   ? primary.withValues(alpha: 0.24)
                   : isFocused.value
                   ? primary.withValues(alpha: 0.18)
+                  : plain
+                  ? Colors.transparent
                   : isWatched
                   ? watchedCardColor
                   : normalCardColor,
@@ -305,6 +333,8 @@ class EpisodeCard extends HookConsumerWidget {
               border: Border.all(
                 color: isSelected || isFocused.value
                     ? primary
+                    : plain
+                    ? Colors.transparent
                     : Theme.of(context).dividerColor.withValues(
                         alpha: Theme.of(context).brightness == Brightness.dark
                             ? 0.1
@@ -319,16 +349,27 @@ class EpisodeCard extends HookConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (vertical)
+                  _buildThumbnail(
+                    context,
+                    displayedProgress,
+                    statusBadge,
+                    isWatched: isWatched,
+                    width: double.infinity,
+                  ),
+                if (vertical) const SizedBox(height: LayoutConstants.spacingSm),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildThumbnail(
-                      context,
-                      displayedProgress,
-                      statusBadge,
-                      isWatched: isWatched,
-                    ),
-                    const SizedBox(width: LayoutConstants.spacingMd),
+                    if (!vertical) ...[
+                      _buildThumbnail(
+                        context,
+                        displayedProgress,
+                        statusBadge,
+                        isWatched: isWatched,
+                      ),
+                      const SizedBox(width: LayoutConstants.spacingMd),
+                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,7 +443,8 @@ class EpisodeCard extends HookConsumerWidget {
                       ),
                   ],
                 ),
-                if (episode.description != null &&
+                if (showDescription &&
+                    episode.description != null &&
                     episode.description!.isNotEmpty) ...[
                   const SizedBox(height: LayoutConstants.spacingSm),
                   Padding(
@@ -611,6 +653,7 @@ class EpisodeCard extends HookConsumerWidget {
     double progress,
     String? statusBadge, {
     required bool isWatched,
+    double? width,
   }) {
     final episodePosterUrl = AppImageFallbacks.optional(episode.posterUrl);
     // Prefer the episode still (AniZip). Falling back through CachedNetworkImage
@@ -657,7 +700,7 @@ class EpisodeCard extends HookConsumerWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            width: 140,
+            width: width ?? 140,
             child: AspectRatio(
               aspectRatio: 16 / 9,
               child: buildThumbnailImage(),

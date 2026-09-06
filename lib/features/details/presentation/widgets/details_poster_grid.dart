@@ -16,10 +16,53 @@ int detailsExtraTabCrossAxisCount(BuildContext context) {
       : detailsExtraTabGridColumns;
 }
 
+/// How many cards the grid below actually lays across [width].
+///
+/// [detailsExtraTabCrossAxisCount] is three, which is not what these grids
+/// do: they hand [ResponsiveBreakpoints.animeGridDelegate] a maximum card
+/// width and let it decide. Measuring the body with three reserved two rows
+/// of wide, tall cards for what a desktop window renders as one row of narrow
+/// ones — a poster's height of black under every one of these sections.
+///
+/// The delegate answers in four ways, and so does this. The last of them
+/// divides the width the grid is actually given, not the window's: they are
+/// not the same number, and using the window here counted columns the grid
+/// had no room for.
+int detailsExtraTabRenderedColumns(BuildContext context, double width) {
+  if (ResponsiveBreakpoints.isDesktopLandscape(context)) {
+    return ResponsiveBreakpoints.desktopLandscapeColumnsForViewport(context);
+  }
+  if (ResponsiveBreakpoints.isHandsetLandscape(context)) {
+    return ResponsiveBreakpoints.handsetLandscapeAnimeColumns;
+  }
+  if (ResponsiveBreakpoints.isHandset(context)) {
+    return MultimediaCardLayout.handsetPortraitGridColumns;
+  }
+
+  // SliverGridDelegateWithMaxCrossAxisExtent's own arithmetic.
+  final spacing = MultimediaCardLayout.catalogGridCrossAxisSpacing(
+    context,
+    fallback: detailsExtraTabCrossAxisSpacing,
+  );
+  final maxExtent = context.isDesktop ? 240.0 : 150.0;
+  if (width <= 0) return 1;
+  return (width / (maxExtent + spacing)).ceil().clamp(1, 40);
+}
+
 /// Height of two poster-card rows in the extra-tabs body.
-double detailsExtraTabBodyHeight(BuildContext context, double width) {
+double detailsExtraTabBodyHeight(
+  BuildContext context,
+  double width, {
+
+  /// How many rows of cards to leave room for.
+  ///
+  /// Two is the most any of these tabs shows, but a title with five similar
+  /// anime fills one — and reserving the second regardless left half a
+  /// screen of nothing under it, with everything below pushed off the page.
+  int rows = 2,
+}) {
   final isDesktop = context.isDesktop;
-  final columns = detailsExtraTabCrossAxisCount(context);
+  final columns = detailsExtraTabRenderedColumns(context, width);
   final crossSpacing = MultimediaCardLayout.catalogGridCrossAxisSpacing(
     context,
     fallback: detailsExtraTabCrossAxisSpacing,
@@ -35,7 +78,8 @@ double detailsExtraTabBodyHeight(BuildContext context, double width) {
         isPortrait: true,
         isDesktop: isDesktop,
       );
-  return childHeight * 2 + mainSpacing;
+  final rowCount = rows.clamp(1, 2);
+  return childHeight * rowCount + (rowCount > 1 ? mainSpacing : 0);
 }
 
 class ExtraTabGridPreview {

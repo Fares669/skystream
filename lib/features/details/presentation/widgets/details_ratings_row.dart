@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../core/account/account_providers.dart';
-import '../../../../core/account/animewitcher_account_models.dart';
-import '../../../../core/account/animewitcher_comment_models.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
-import '../../../../core/services/notification_service.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../comments/presentation/animewitcher_comments_screen.dart';
 import '../details_ratings.dart';
+import 'details_rating_actions.dart';
+// The two toast strings moved with the actions that show them. They are
+// still part of this file's surface: the panel is what a caller looks at.
+export 'details_rating_actions.dart'
+    show kRateLoginRequiredToast, kReviewsClosedToast;
 import 'scale_rating_bar.dart';
 
 const Key kDetailsRatingsRowKey = Key('details-ratings-row');
@@ -23,9 +24,6 @@ const Key kDetailsRatingsMalBadgeKey = Key('details-ratings-mal-badge');
 const Key kDetailsRatingsMalStarKey = Key('details-ratings-mal-star');
 
 const Color kMalBadgeBlue = Color(0xFF2E51A2);
-
-const String kRateLoginRequiredToast = 'يجب تسجيل الدخول';
-const String kReviewsClosedToast = 'تم ايقاف المراجعات علي هذا الأنمي';
 
 class DetailsRatingsRow extends ConsumerStatefulWidget {
   const DetailsRatingsRow({super.key, required this.item});
@@ -42,8 +40,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
   bool _loadedRating = false;
   String? _loadedAnimeId;
 
-  AnimeDetailsRatings get _ratings =>
-      AnimeDetailsRatings.fromItem(widget.item);
+  AnimeDetailsRatings get _ratings => AnimeDetailsRatings.fromItem(widget.item);
 
   @override
   void initState() {
@@ -96,77 +93,19 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
     }
   }
 
-  void _toast(String message, {bool info = true}) {
-    final notifications = ref.read(notificationServiceProvider);
-    if (info) {
-      notifications.showInfo(message);
-    } else {
-      notifications.showError(message);
-    }
-  }
-
   Future<void> _onRatePressed() async {
-    final service = ref.read(animeWitcherAccountServiceProvider);
-    if (!service.isSignedIn) {
-      _toast(kRateLoginRequiredToast);
-      return;
-    }
-    if (!_ratings.canRate) return;
-    final selected = await showAnimeRatingDialog(
+    final outcome = await openAnimeRatingDialog(
       context,
+      ref,
+      ratings: _ratings,
       initialRating: _userRating ?? 0,
     );
-    if (!mounted || selected == null) return;
-    try {
-      if (selected == 0) {
-        await service.clearAnimeUserRating(_ratings.animeId);
-        if (!mounted) return;
-        setState(() => _userRating = null);
-      } else {
-        final saved = await service.saveAnimeUserRating(
-          _ratings.animeId,
-          selected,
-        );
-        if (!mounted) return;
-        setState(() => _userRating = saved);
-      }
-    } catch (error) {
-      if (!mounted) return;
-      if (error is AnimeWitcherAccountException &&
-          error.code == 'not-signed-in') {
-        _toast(kRateLoginRequiredToast);
-      } else {
-        _toast(error.toString(), info: false);
-      }
-    }
+    if (!mounted || !outcome.changed) return;
+    setState(() => _userRating = outcome.rating);
   }
 
   Future<void> _onReviewsPressed() async {
-    final ratings = _ratings;
-    if (ratings.reviewsClosed) {
-      _toast(kReviewsClosedToast);
-      return;
-    }
-    final service = ref.read(animeWitcherAccountServiceProvider);
-    if (service.isSignedIn && ratings.animeId.isNotEmpty) {
-      try {
-        final closed = await service.isAnimeReviewsClosed(ratings.animeId);
-        if (!mounted) return;
-        if (closed) {
-          _toast(kReviewsClosedToast);
-          return;
-        }
-      } catch (_) {
-        // Keep the local details flag as the fallback.
-      }
-    }
-    final target = animeWitcherAnimeReviewTarget(widget.item);
-    if (target == null || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AnimeWitcherCommentsScreen(target: target),
-      ),
-    );
+    await openAnimeReviews(context, ref, item: widget.item, ratings: _ratings);
   }
 
   @override
@@ -319,9 +258,7 @@ class _DetailsRatingsRowState extends ConsumerState<DetailsRatingsRow> {
                 enabled: ratings.canRate,
                 starSize: 18,
                 padding: const EdgeInsets.symmetric(horizontal: 1),
-                onChanged: ratings.canRate
-                    ? (_) => _onRatePressed()
-                    : null,
+                onChanged: ratings.canRate ? (_) => _onRatePressed() : null,
               ),
             ),
           ],
@@ -439,65 +376,4 @@ class _RatingsActionButton extends StatelessWidget {
       ),
     );
   }
-}
-
-Future<int?> showAnimeRatingDialog(
-  BuildContext context, {
-  required int initialRating,
-}) {
-  var rating = initialRating.clamp(0, 10);
-  return showDialog<int>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('قيّم'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$rating /10',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: ScaleRatingBar(
-                      rating: rating,
-                      starSize: 30,
-                      onChanged: (value) {
-                        setDialogState(() => rating = value);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              if (initialRating > 0)
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, 0),
-                  child: const Text('مسح التقييم'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('إلغاء'),
-              ),
-              FilledButton(
-                onPressed: rating <= 0
-                    ? null
-                    : () => Navigator.pop(dialogContext, rating),
-                child: const Text('تأكيد'),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
 }
