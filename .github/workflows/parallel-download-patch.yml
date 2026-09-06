@@ -120,11 +120,28 @@ jobs:
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Download settings integration tests
-        run: >-
-          flutter test
-          test/features/settings/presentation/download_concurrency_settings_test.dart
-          --reporter expanded
-          --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key
+        id: settings_tests
+        shell: bash
+        run: |
+          set +e
+          flutter test test/features/settings/presentation/download_concurrency_settings_test.dart \
+            --reporter expanded \
+            --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key \
+            > /tmp/download-settings-test.log 2>&1
+          status=$?
+          echo "=== DOWNLOAD SETTINGS TEST FAILURE EXCERPT ==="
+          grep -n -E -B 20 -A 60 "TestFailure|Expected:|Actual:|Exception|EXCEPTION|Some tests failed|══╡" /tmp/download-settings-test.log || true
+          echo "=== DOWNLOAD SETTINGS TEST TAIL ==="
+          tail -n 220 /tmp/download-settings-test.log
+          exit $status
+
+      - name: Upload isolated settings test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-settings-test-log
+          path: /tmp/download-settings-test.log
+          if-no-files-found: ignore
 
       - name: Show final diff summary
         if: always()
