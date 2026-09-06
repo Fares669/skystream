@@ -16,9 +16,8 @@ class _TestStorageService extends StorageService {
   bool isEpisodeImagesFromAniZipEnabled() => false;
 }
 
-Map<String, dynamic> _stringField(String value) => <String, dynamic>{
-  'stringValue': value,
-};
+Map<String, dynamic> _stringField(String value) =>
+    <String, dynamic>{'stringValue': value};
 
 Map<String, dynamic> _mapField(Map<String, dynamic> fields) =>
     <String, dynamic>{
@@ -125,7 +124,9 @@ bool _isAlgolia(Uri uri) =>
         } else if (path.contains('anime_list/naruto') &&
             !path.contains(':runQuery')) {
           data = <String, dynamic>{
-            'fields': <String, dynamic>{'name': _stringField('ناروتو FS')},
+            'fields': <String, dynamic>{
+              'name': _stringField('ناروتو FS'),
+            },
           };
         } else if (path.contains(':runQuery')) {
           data = <Map<String, dynamic>>[
@@ -174,53 +175,53 @@ Map<String, String> _queryParams(RequestOptions options) {
 }
 
 void main() {
-  test(
-    'season config uses Settings JSON seasons.past/current/next as-is',
-    () async {
-      final stub = _stubDio();
-      final config = await _provider(stub.dio).getSeasonConfig();
+  test('season config uses Settings JSON seasons.past/current/next as-is',
+      () async {
+    final stub = _stubDio();
+    final config = await _provider(stub.dio).getSeasonConfig();
 
-      expect(config.past, 'شتاء عام 2025');
-      expect(config.current, 'ربيع عام 2026');
-      expect(config.next, 'صيف عام 2026');
-    },
-  );
+    expect(config.past, 'شتاء عام 2025');
+    expect(config.current, 'ربيع عام 2026');
+    expect(config.next, 'صيف عام 2026');
+  });
 
-  test(
-    'season tabs browse series with details.season and the browse key',
-    () async {
-      final stub = _stubDio();
-      final page = await _provider(stub.dio).getSeasonPage('ربيع عام 2026');
+  test('season tabs browse series with details.season and the browse key',
+      () async {
+    final stub = _stubDio();
+    final page = await _provider(stub.dio).getSeasonPage('ربيع عام 2026');
 
-      expect(page.items, isNotEmpty);
-      final browse = stub.requests.singleWhere(
-        (request) =>
-            _isAlgolia(request.uri) &&
-            request.uri.path.endsWith('/indexes/series/browse'),
-      );
-      expect(browse.method, 'GET');
-      expect(browse.headers['X-Algolia-API-Key'], 'browse-key');
-      final params = browse.uri.queryParameters;
-      expect(params['filters'], contains('details.season:'));
-      expect(params['filters'], contains('ربيع عام 2026'));
-      expect(params['hitsPerPage'], '100');
-      expect(
-        stub.requests.any(
-          (request) => request.uri.path.contains('/indexes/series/query'),
-        ),
-        isFalse,
-      );
-    },
-  );
+    expect(page.items, isNotEmpty);
+    final browse = stub.requests.singleWhere(
+      (request) =>
+          _isAlgolia(request.uri) &&
+          request.uri.path.endsWith('/indexes/series/browse'),
+    );
+    expect(browse.method, 'GET');
+    expect(browse.headers['X-Algolia-API-Key'], 'browse-key');
+    final params = browse.uri.queryParameters;
+    expect(params['filters'], contains('details.season:'));
+    expect(params['filters'], contains('ربيع عام 2026'));
+    expect(params['hitsPerPage'], '100');
+    expect(
+      stub.requests.any(
+        (request) => request.uri.path.contains('/indexes/series/query'),
+      ),
+      isFalse,
+    );
+  });
 
   test('rankings query Firestore mal_rank at APK page size 24', () async {
     final stub = _stubDio();
-    final page = await _provider(
-      stub.dio,
-    ).getGlobalRankingPage(AnimeWitcherGlobalRanking.all, limit: 30);
+    final page = await _provider(stub.dio).getGlobalRankingPage(
+      AnimeWitcherGlobalRanking.all,
+      limit: 30,
+    );
 
     expect(page.items, isNotEmpty);
-    expect(stub.requests.any((request) => _isAlgolia(request.uri)), isFalse);
+    expect(
+      stub.requests.any((request) => _isAlgolia(request.uri)),
+      isFalse,
+    );
     final query = stub.requests.singleWhere(
       (request) => request.uri.path.contains(':runQuery'),
     );
@@ -238,28 +239,26 @@ void main() {
     expect(order['direction'], 'ASCENDING');
   });
 
-  test(
-    'continuing ranking filters details.state and still uses mal_rank',
-    () async {
-      final stub = _stubDio();
-      await _provider(
-        stub.dio,
-      ).getGlobalRankingPage(AnimeWitcherGlobalRanking.continuing);
+  test('continuing ranking filters details.state and still uses mal_rank',
+      () async {
+    final stub = _stubDio();
+    await _provider(stub.dio).getGlobalRankingPage(
+      AnimeWitcherGlobalRanking.continuing,
+    );
 
-      final query = stub.requests.singleWhere(
-        (request) => request.uri.path.contains(':runQuery'),
-      );
-      final structured = Map<String, dynamic>.from(
-        Map<String, dynamic>.from(query.data as Map)['structuredQuery'] as Map,
-      );
-      expect(structured['limit'], 24);
-      final where = Map<String, dynamic>.from(structured['where'] as Map);
-      final filter = Map<String, dynamic>.from(where['fieldFilter'] as Map);
-      expect(filter['field'], <String, dynamic>{'fieldPath': 'details.state'});
-      expect(filter['op'], 'EQUAL');
-      expect(filter['value'], <String, dynamic>{'stringValue': 'مستمر'});
-    },
-  );
+    final query = stub.requests.singleWhere(
+      (request) => request.uri.path.contains(':runQuery'),
+    );
+    final structured = Map<String, dynamic>.from(
+      Map<String, dynamic>.from(query.data as Map)['structuredQuery'] as Map,
+    );
+    expect(structured['limit'], 24);
+    final where = Map<String, dynamic>.from(structured['where'] as Map);
+    final filter = Map<String, dynamic>.from(where['fieldFilter'] as Map);
+    expect(filter['field'], <String, dynamic>{'fieldPath': 'details.state'});
+    expect(filter['op'], 'EQUAL');
+    expect(filter['value'], <String, dynamic>{'stringValue': 'مستمر'});
+  });
 
   test('ranking Firestore 403 is a failure, not an empty category', () async {
     final stub = _stubDio(
@@ -273,59 +272,57 @@ void main() {
       _provider(stub.dio).getGlobalRankingPage(AnimeWitcherGlobalRanking.all),
       throwsA(isA<StateError>()),
     );
-    expect(stub.requests.any((request) => _isAlgolia(request.uri)), isFalse);
+    expect(
+      stub.requests.any((request) => _isAlgolia(request.uri)),
+      isFalse,
+    );
   });
 
-  test(
-    'anime details load Algolia series object then skip Firestore',
-    () async {
-      final stub = _stubDio();
-      final item = await _provider(
-        stub.dio,
-      ).getDetails('https://animewitcher.com/watch/naruto');
+  test('anime details load Algolia series object then skip Firestore', () async {
+    final stub = _stubDio();
+    final item = await _provider(stub.dio).getDetails(
+      'https://animewitcher.com/watch/naruto',
+    );
 
-      expect(item.title, 'ناروتو');
-      final object = stub.requests.singleWhere(
-        (request) =>
-            _isAlgolia(request.uri) &&
-            request.uri.path.contains('/indexes/series/naruto'),
-      );
-      expect(object.method, 'GET');
-      expect(object.headers['X-Algolia-API-Key'], 'search-key');
-      expect(
-        stub.requests.any(
-          (request) => request.uri.path.contains('anime_list/naruto'),
-        ),
-        isFalse,
-      );
-    },
-  );
+    expect(item.title, 'ناروتو');
+    final object = stub.requests.singleWhere(
+      (request) =>
+          _isAlgolia(request.uri) &&
+          request.uri.path.contains('/indexes/series/naruto'),
+    );
+    expect(object.method, 'GET');
+    expect(object.headers['X-Algolia-API-Key'], 'search-key');
+    expect(
+      stub.requests.any(
+        (request) => request.uri.path.contains('anime_list/naruto'),
+      ),
+      isFalse,
+    );
+  });
 
-  test(
-    'anime details fall back to Firestore when Algolia object fails',
-    () async {
-      final stub = _stubDio(
-        statusFor: (options) {
-          if (_isAlgolia(options.uri) &&
-              options.uri.path.contains('/indexes/series/naruto')) {
-            return 503;
-          }
-          return 200;
-        },
-      );
-      final item = await _provider(
-        stub.dio,
-      ).getDetails('https://animewitcher.com/watch/naruto');
+  test('anime details fall back to Firestore when Algolia object fails',
+      () async {
+    final stub = _stubDio(
+      statusFor: (options) {
+        if (_isAlgolia(options.uri) &&
+            options.uri.path.contains('/indexes/series/naruto')) {
+          return 503;
+        }
+        return 200;
+      },
+    );
+    final item = await _provider(stub.dio).getDetails(
+      'https://animewitcher.com/watch/naruto',
+    );
 
-      expect(item.title, 'ناروتو FS');
-      expect(
-        stub.requests.any(
-          (request) => request.uri.path.contains('anime_list/naruto'),
-        ),
-        isTrue,
-      );
-    },
-  );
+    expect(item.title, 'ناروتو FS');
+    expect(
+      stub.requests.any(
+        (request) => request.uri.path.contains('anime_list/naruto'),
+      ),
+      isTrue,
+    );
+  });
 
   test('news list uses browse key + searchAsync page 0 at 1000 hits', () async {
     final stub = _stubDio();
@@ -374,36 +371,37 @@ void main() {
     expect(params['hitsPerPage'], '200');
     expect(params['page'], '0');
 
-    final extra = await _provider(
-      stub.dio,
-    ).getHomeSectionPage('Latest', offset: 200);
+    final extra = await _provider(stub.dio).getHomeSectionPage(
+      'Latest',
+      offset: 200,
+    );
     expect(extra.items, isEmpty);
     expect(extra.hasMore, isFalse);
   });
 
-  test(
-    'similar titles query series_similar with 11 hits and search key',
-    () async {
-      final stub = _stubDio();
-      final provider = _provider(stub.dio);
-      await provider.getDetails('https://animewitcher.com/watch/naruto');
-      await provider.getRecommendations(
-        'https://animewitcher.com/watch/naruto',
-      );
+  test('similar titles query series_similar with 11 hits and search key',
+      () async {
+    final stub = _stubDio();
+    final provider = _provider(stub.dio);
+    await provider.getDetails('https://animewitcher.com/watch/naruto');
+    await provider.getRecommendations(
+      'https://animewitcher.com/watch/naruto',
+    );
 
-      final similar = stub.requests.singleWhere(
-        (request) =>
-            _isAlgolia(request.uri) &&
-            request.uri.path.endsWith('/indexes/series_similar/query'),
-      );
-      expect(similar.method, 'POST');
-      expect(similar.headers['X-Algolia-API-Key'], 'search-key');
-      final params = _queryParams(similar);
-      expect(params['hitsPerPage'], '11');
-      expect(params['query'], contains('اكشن'));
-      final attrs =
-          jsonDecode(params['attributesToRetrieve']!) as List<dynamic>;
-      expect(attrs, <String>[
+    final similar = stub.requests.singleWhere(
+      (request) =>
+          _isAlgolia(request.uri) &&
+          request.uri.path.endsWith('/indexes/series_similar/query'),
+    );
+    expect(similar.method, 'POST');
+    expect(similar.headers['X-Algolia-API-Key'], 'search-key');
+    final params = _queryParams(similar);
+    expect(params['hitsPerPage'], '11');
+    expect(params['query'], contains('اكشن'));
+    final attrs = jsonDecode(params['attributesToRetrieve']!) as List<dynamic>;
+    expect(
+      attrs,
+      <String>[
         'objectID',
         'name',
         'poster_uri',
@@ -416,9 +414,9 @@ void main() {
         'mal_id',
         'malId',
         'rating',
-      ]);
-    },
-  );
+      ],
+    );
+  });
 
   test('home rails use Algolia search, not browse', () async {
     final stub = _stubDio();
@@ -448,72 +446,67 @@ void main() {
     );
   });
 
-  test(
-    'empty search uses series searchAsync, not series_name_asc browse',
-    () async {
-      final stub = _stubDio();
-      await _provider(stub.dio).searchPage('', const ProviderSearchFilters());
+  test('empty search uses series searchAsync, not series_name_asc browse',
+      () async {
+    final stub = _stubDio();
+    await _provider(stub.dio).searchPage('', const ProviderSearchFilters());
 
-      final query = stub.requests.singleWhere(
+    final query = stub.requests.singleWhere(
+      (request) =>
+          _isAlgolia(request.uri) && request.uri.path.contains('/query'),
+    );
+    expect(query.method, 'POST');
+    expect(query.uri.path, endsWith('/indexes/series/query'));
+    expect(query.headers['X-Algolia-API-Key'], 'search-key');
+    expect(
+      stub.requests.any(
+        (request) => request.uri.path.contains('series_name_asc'),
+      ),
+      isFalse,
+    );
+    expect(
+      stub.requests.any(
         (request) =>
-            _isAlgolia(request.uri) && request.uri.path.contains('/query'),
-      );
-      expect(query.method, 'POST');
-      expect(query.uri.path, endsWith('/indexes/series/query'));
-      expect(query.headers['X-Algolia-API-Key'], 'search-key');
-      expect(
-        stub.requests.any(
-          (request) => request.uri.path.contains('series_name_asc'),
-        ),
-        isFalse,
-      );
-      expect(
-        stub.requests.any(
-          (request) =>
-              _isAlgolia(request.uri) && request.uri.path.contains('/browse'),
-        ),
-        isFalse,
-      );
-    },
-  );
+            _isAlgolia(request.uri) && request.uri.path.contains('/browse'),
+      ),
+      isFalse,
+    );
+  });
 
-  test(
-    'news list falls back to Firestore limit 5 when search is inactive',
-    () async {
-      final stub = _stubDio(searchActive: false);
-      final page = await _provider(stub.dio).getNewsPage();
+  test('news list falls back to Firestore limit 5 when search is inactive',
+      () async {
+    final stub = _stubDio(searchActive: false);
+    final page = await _provider(stub.dio).getNewsPage();
 
-      expect(page.hasMore, isFalse);
-      expect(
-        stub.requests.any(
-          (request) =>
-              _isAlgolia(request.uri) &&
-              request.uri.path.contains('/indexes/news'),
-        ),
-        isFalse,
-      );
-      final query = stub.requests.singleWhere(
-        (request) => request.uri.path.contains(':runQuery'),
-      );
-      final payload = Map<String, dynamic>.from(query.data as Map);
-      final structured = Map<String, dynamic>.from(
-        payload['structuredQuery'] as Map,
-      );
-      expect(structured['from'], <Map<String, dynamic>>[
-        <String, dynamic>{'collectionId': 'news'},
-      ]);
-      expect(structured['limit'], 5);
-      final order = (structured['orderBy'] as List).first as Map;
-      expect(order['field'], <String, dynamic>{'fieldPath': 'date_created'});
-      expect(order['direction'], 'DESCENDING');
-    },
-  );
+    expect(page.hasMore, isFalse);
+    expect(
+      stub.requests.any(
+        (request) =>
+            _isAlgolia(request.uri) && request.uri.path.contains('/indexes/news'),
+      ),
+      isFalse,
+    );
+    final query = stub.requests.singleWhere(
+      (request) => request.uri.path.contains(':runQuery'),
+    );
+    final payload = Map<String, dynamic>.from(query.data as Map);
+    final structured = Map<String, dynamic>.from(
+      payload['structuredQuery'] as Map,
+    );
+    expect(structured['from'], <Map<String, dynamic>>[
+      <String, dynamic>{'collectionId': 'news'},
+    ]);
+    expect(structured['limit'], 5);
+    final order = (structured['orderBy'] as List).first as Map;
+    expect(order['field'], <String, dynamic>{'fieldPath': 'date_created'});
+    expect(order['direction'], 'DESCENDING');
+  });
 
   test('anime details skip the is_search_active gate', () async {
     final stub = _stubDio(searchActive: false);
-    final item = await _provider(
-      stub.dio,
-    ).getDetails('https://animewitcher.com/watch/naruto');
+    final item = await _provider(stub.dio).getDetails(
+      'https://animewitcher.com/watch/naruto',
+    );
 
     expect(item.title, 'ناروتو');
     expect(

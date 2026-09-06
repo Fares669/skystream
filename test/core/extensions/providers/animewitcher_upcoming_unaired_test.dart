@@ -30,7 +30,10 @@ class _MemoryStorageService extends StorageService {
   String? getString(String key) => values[key];
 }
 
-AnimeWitcherNativeProvider _provider(Dio dio, {StorageService? storage}) =>
+AnimeWitcherNativeProvider _provider(
+  Dio dio, {
+  StorageService? storage,
+}) =>
     AnimeWitcherNativeProvider(
       dio,
       SettingsRepository(storage ?? _MemoryStorageService()),
@@ -43,13 +46,11 @@ const String _fallbackAppId = 'FALLBACKAPP';
 const String _fallbackApiKey = 'fallback-api-key';
 const String _fallbackBrowseKey = 'fallback-browse-key';
 
-Map<String, dynamic> _stringField(String value) => <String, dynamic>{
-  'stringValue': value,
-};
+Map<String, dynamic> _stringField(String value) =>
+    <String, dynamic>{'stringValue': value};
 
-Map<String, dynamic> _boolField(bool value) => <String, dynamic>{
-  'booleanValue': value,
-};
+Map<String, dynamic> _boolField(bool value) =>
+    <String, dynamic>{'booleanValue': value};
 
 Map<String, dynamic> _mapField(Map<String, dynamic> fields) =>
     <String, dynamic>{
@@ -110,7 +111,9 @@ Map<String, dynamic> _unairedHit(String id, {String title = ''}) {
       'state': 'لم يتم بثه بعد',
       'season': 'شتاء عام 2027',
     },
-    'poster': <String, dynamic>{'large': 'https://cdn.example.test/$id.jpg'},
+    'poster': <String, dynamic>{
+      'large': 'https://cdn.example.test/$id.jpg',
+    },
   };
 }
 
@@ -225,7 +228,9 @@ void main() {
       reason: 'coming soon must not load the next-season home rail',
     );
     expect(
-      stub.requests.any((request) => request.uri.path.contains(':runQuery')),
+      stub.requests.any(
+        (request) => request.uri.path.contains(':runQuery'),
+      ),
       isFalse,
       reason: 'coming soon must not fall back to Firestore anime_list',
     );
@@ -252,22 +257,25 @@ void main() {
     expect(params.containsKey('query'), isFalse);
     final attributes =
         jsonDecode(params['attributesToRetrieve'] ?? '[]') as List<dynamic>;
-    expect(attributes, <String>[
-      'objectID',
-      'name',
-      'tags',
-      'poster_uri',
-      'order',
-      'path',
-      'type',
-      'poster',
-      'aniList_poster',
-      'details',
-      'mal_id',
-      'malId',
-      'rating',
-      'dubbed',
-    ]);
+    expect(
+      attributes,
+      <String>[
+        'objectID',
+        'name',
+        'tags',
+        'poster_uri',
+        'order',
+        'path',
+        'type',
+        'poster',
+        'aniList_poster',
+        'details',
+        'mal_id',
+        'malId',
+        'rating',
+        'dubbed',
+      ],
+    );
 
     expect(page.items, hasLength(2));
     expect(page.items.first.title, 'عمل لم يُبث');
@@ -280,9 +288,7 @@ void main() {
 
     final artifacts = Directory('/opt/cursor/artifacts');
     if (artifacts.existsSync()) {
-      File(
-        '${artifacts.path}/coming_soon_algolia_browse.txt',
-      ).writeAsStringSync(
+      File('${artifacts.path}/coming_soon_algolia_browse.txt').writeAsStringSync(
         'method: ${query.method}\n'
         'host: ${query.uri.host}\n'
         'path: ${query.uri.path}\n'
@@ -294,124 +300,116 @@ void main() {
     }
   });
 
+  test('coming soon pagination asks Algolia browse for the next unaired page',
+      () async {
+    final stub = _stubDio(hits: <Map<String, dynamic>>[_unairedHit('p2')]);
+
+    await _provider(stub.dio).getUpcomingPage(offset: 100);
+
+    final query = stub.requests.firstWhere(
+      (request) => _isAlgoliaHost(request.uri) && _isBrowse(request.uri),
+    );
+    expect(query.method, 'GET');
+    expect(query.uri.queryParameters['page'], '1');
+    expect(
+      query.uri.queryParameters['filters'],
+      contains('لم يتم بثه بعد'),
+    );
+    expect(query.uri.queryParameters['hitsPerPage'], '100');
+  });
+
+  test('coming soon does not fall back to Firestore when browse fails',
+      () async {
+    final stub = _stubDio(
+      hits: <Map<String, dynamic>>[_unairedHit('nope')],
+      browseStatus: () => 503,
+    );
+
+    await expectLater(
+      _provider(stub.dio).getUpcomingPage(),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      stub.requests.any((request) => request.uri.path.contains(':runQuery')),
+      isFalse,
+    );
+    expect(
+      stub.requests.any(
+        (request) => request.uri.path.contains('/indexes/series/query'),
+      ),
+      isFalse,
+    );
+  });
+
   test(
-    'coming soon pagination asks Algolia browse for the next unaired page',
-    () async {
-      final stub = _stubDio(hits: <Map<String, dynamic>>[_unairedHit('p2')]);
+      'when Firestore Settings is down, coming soon loads constants from Algolia then browses',
+      () async {
+    final storage = _MemoryStorageService();
+    final settings = SettingsRepository(storage);
 
-      await _provider(stub.dio).getUpcomingPage(offset: 100);
+    final warm = _stubDio(hits: <Map<String, dynamic>>[_unairedHit('warm')]);
+    await _provider(warm.dio, storage: storage).getUpcomingPage();
+    expect(settings.getAnimeWitcherSearchSettings2(), isNotEmpty);
 
-      final query = stub.requests.firstWhere(
+    var firestoreCalls = 0;
+    var algoliaSettingsCalls = 0;
+    final stub = _stubDio(
+      hits: <Map<String, dynamic>>[_unairedHit('offline-1')],
+      firestoreSettingsStatus: () {
+        firestoreCalls += 1;
+        return 503;
+      },
+      algoliaSettingsStatus: () {
+        algoliaSettingsCalls += 1;
+        return 200;
+      },
+      algoliaSettings: _algoliaConstants(browseKey: _fallbackBrowseKey),
+    );
+
+    final page = await _provider(stub.dio, storage: storage).getUpcomingPage();
+
+    expect(firestoreCalls, greaterThan(0));
+    expect(algoliaSettingsCalls, 1);
+    final constants = stub.requests.firstWhere(
+      (request) => _isAlgoliaSettingsObject(request.uri),
+    );
+    expect(constants.method, 'GET');
+    expect(constants.data, isNull);
+    expect(constants.uri.host.toLowerCase(),
+        '${_fallbackAppId.toLowerCase()}-dsn.algolia.net');
+    expect(constants.uri.path, contains('/indexes/Settings/constants'));
+    expect(_header(constants, 'X-Algolia-Application-Id'), _fallbackAppId);
+    expect(_header(constants, 'X-Algolia-API-Key'), _fallbackApiKey);
+
+    final browse = stub.requests.firstWhere(
+      (request) => _isAlgoliaHost(request.uri) && _isBrowse(request.uri),
+    );
+    expect(_header(browse, 'X-Algolia-API-Key'), _fallbackBrowseKey);
+    expect(page.items, hasLength(1));
+    expect(page.items.first.title, 'قادم offline-1');
+  });
+
+  test(
+      'coming soon errors when Firestore Settings is down and no search_settings2 cache exists',
+      () async {
+    final stub = _stubDio(
+      hits: <Map<String, dynamic>>[_unairedHit('unused')],
+      firestoreSettingsStatus: () => 503,
+    );
+
+    await expectLater(
+      _provider(stub.dio).getUpcomingPage(),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      stub.requests.any((request) => _isAlgoliaSettingsObject(request.uri)),
+      isFalse,
+    );
+    expect(
+      stub.requests.any(
         (request) => _isAlgoliaHost(request.uri) && _isBrowse(request.uri),
-      );
-      expect(query.method, 'GET');
-      expect(query.uri.queryParameters['page'], '1');
-      expect(query.uri.queryParameters['filters'], contains('لم يتم بثه بعد'));
-      expect(query.uri.queryParameters['hitsPerPage'], '100');
-    },
-  );
-
-  test(
-    'coming soon does not fall back to Firestore when browse fails',
-    () async {
-      final stub = _stubDio(
-        hits: <Map<String, dynamic>>[_unairedHit('nope')],
-        browseStatus: () => 503,
-      );
-
-      await expectLater(
-        _provider(stub.dio).getUpcomingPage(),
-        throwsA(isA<StateError>()),
-      );
-      expect(
-        stub.requests.any((request) => request.uri.path.contains(':runQuery')),
-        isFalse,
-      );
-      expect(
-        stub.requests.any(
-          (request) => request.uri.path.contains('/indexes/series/query'),
-        ),
-        isFalse,
-      );
-    },
-  );
-
-  test(
-    'when Firestore Settings is down, coming soon loads constants from Algolia then browses',
-    () async {
-      final storage = _MemoryStorageService();
-      final settings = SettingsRepository(storage);
-
-      final warm = _stubDio(hits: <Map<String, dynamic>>[_unairedHit('warm')]);
-      await _provider(warm.dio, storage: storage).getUpcomingPage();
-      expect(settings.getAnimeWitcherSearchSettings2(), isNotEmpty);
-
-      var firestoreCalls = 0;
-      var algoliaSettingsCalls = 0;
-      final stub = _stubDio(
-        hits: <Map<String, dynamic>>[_unairedHit('offline-1')],
-        firestoreSettingsStatus: () {
-          firestoreCalls += 1;
-          return 503;
-        },
-        algoliaSettingsStatus: () {
-          algoliaSettingsCalls += 1;
-          return 200;
-        },
-        algoliaSettings: _algoliaConstants(browseKey: _fallbackBrowseKey),
-      );
-
-      final page = await _provider(
-        stub.dio,
-        storage: storage,
-      ).getUpcomingPage();
-
-      expect(firestoreCalls, greaterThan(0));
-      expect(algoliaSettingsCalls, 1);
-      final constants = stub.requests.firstWhere(
-        (request) => _isAlgoliaSettingsObject(request.uri),
-      );
-      expect(constants.method, 'GET');
-      expect(constants.data, isNull);
-      expect(
-        constants.uri.host.toLowerCase(),
-        '${_fallbackAppId.toLowerCase()}-dsn.algolia.net',
-      );
-      expect(constants.uri.path, contains('/indexes/Settings/constants'));
-      expect(_header(constants, 'X-Algolia-Application-Id'), _fallbackAppId);
-      expect(_header(constants, 'X-Algolia-API-Key'), _fallbackApiKey);
-
-      final browse = stub.requests.firstWhere(
-        (request) => _isAlgoliaHost(request.uri) && _isBrowse(request.uri),
-      );
-      expect(_header(browse, 'X-Algolia-API-Key'), _fallbackBrowseKey);
-      expect(page.items, hasLength(1));
-      expect(page.items.first.title, 'قادم offline-1');
-    },
-  );
-
-  test(
-    'coming soon errors when Firestore Settings is down and no search_settings2 cache exists',
-    () async {
-      final stub = _stubDio(
-        hits: <Map<String, dynamic>>[_unairedHit('unused')],
-        firestoreSettingsStatus: () => 503,
-      );
-
-      await expectLater(
-        _provider(stub.dio).getUpcomingPage(),
-        throwsA(isA<StateError>()),
-      );
-      expect(
-        stub.requests.any((request) => _isAlgoliaSettingsObject(request.uri)),
-        isFalse,
-      );
-      expect(
-        stub.requests.any(
-          (request) => _isAlgoliaHost(request.uri) && _isBrowse(request.uri),
-        ),
-        isFalse,
-      );
-    },
-  );
+      ),
+      isFalse,
+    );
+  });
 }
