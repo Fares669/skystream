@@ -555,6 +555,14 @@ class AppleLiquidGlassSurface extends StatelessWidget {
   final Color fallbackColor;
   final BorderSide? fallbackBorder;
 
+  /// Whether the fallback blurs what is behind it.
+  ///
+  /// Every blur is a save-layer the GPU re-reads each frame, and a list that
+  /// scrolls pays for one per row. Over artwork that buys the material its
+  /// look; over a flat page it buys a picture of the same flat colour. Rows
+  /// in a scrolling list turn it off and keep the fill.
+  final bool fallbackBlur;
+
   const AppleLiquidGlassSurface({
     super.key,
     required this.child,
@@ -563,6 +571,7 @@ class AppleLiquidGlassSurface extends StatelessWidget {
     this.interactive = false,
     this.fallbackColor = Colors.transparent,
     this.fallbackBorder,
+    this.fallbackBlur = true,
   });
 
   @override
@@ -572,20 +581,24 @@ class AppleLiquidGlassSurface extends StatelessWidget {
       // blur behind a translucent fill — the same thing the taskbar and the
       // search capsule do. A flat box was reading as a plain grey panel
       // dropped on the artwork rather than a surface floating over it.
+      final surface = DecoratedBox(
+        decoration: BoxDecoration(
+          color: fallbackColor,
+          borderRadius: borderRadius,
+          border: fallbackBorder == null
+              ? null
+              : Border.fromBorderSide(fallbackBorder!),
+        ),
+        child: child,
+      );
+      if (!fallbackBlur) {
+        return ClipRRect(borderRadius: borderRadius, child: surface);
+      }
       return ClipRRect(
         borderRadius: borderRadius,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: fallbackColor,
-              borderRadius: borderRadius,
-              border: fallbackBorder == null
-                  ? null
-                  : Border.fromBorderSide(fallbackBorder!),
-            ),
-            child: child,
-          ),
+          child: surface,
         ),
       );
     }
@@ -1198,7 +1211,9 @@ class _AppleNativeToolbarState extends State<_AppleNativeToolbar> {
             : PlatformViewHitTestBehavior.translucent,
         gestureRecognizers: widget.captureGestures
             ? <Factory<OneSequenceGestureRecognizer>>{
-                Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+                Factory<OneSequenceGestureRecognizer>(
+                  () => EagerGestureRecognizer(),
+                ),
               }
             : const <Factory<OneSequenceGestureRecognizer>>{},
         layoutDirection: Directionality.of(context),

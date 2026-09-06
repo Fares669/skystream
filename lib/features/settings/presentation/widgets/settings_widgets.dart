@@ -4,6 +4,13 @@ import '../../../../core/utils/layout_constants.dart';
 import 'package:animewitcher/core/utils/localized_text.dart';
 import '../../../../shared/widgets/apple_liquid_glass.dart';
 
+/// A run of settings under a quiet heading.
+///
+/// Harbor's shape, on the phone and the desktop alike: no card around the
+/// rows, no fill behind them, just a small grey label and the settings
+/// themselves separated by hairlines. The panel had been drawing a box around
+/// content that was already a list, and an accent-coloured heading shouting
+/// over settings nobody needs shouted at.
 class SettingsGroup extends StatelessWidget {
   final String title;
   final List<Widget> children;
@@ -12,28 +19,28 @@ class SettingsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: LayoutConstants.spacingMd,
-            vertical: LayoutConstants.spacingSm,
-          ),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
+        if (title.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              LayoutConstants.spacingMd,
+              LayoutConstants.spacingLg,
+              LayoutConstants.spacingMd,
+              LayoutConstants.spacingXs,
+            ),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colors.onSurfaceVariant.withValues(alpha: 0.75),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: LayoutConstants.spacingMd,
-          ),
-          child: SettingsPanel(child: Column(children: children)),
-        ),
+        Column(children: children),
       ],
     );
   }
@@ -66,6 +73,10 @@ class SettingsPanel extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return AppleLiquidGlassSurface(
       borderRadius: BorderRadius.circular(radius),
+      // Six of these stack up a settings page, and each blur is a layer the
+      // GPU re-reads on every scrolled frame — for a picture of the flat page
+      // behind them. The fill alone looks the same and costs nothing.
+      fallbackBlur: false,
       fallbackColor:
           fill ?? colors.surfaceContainerHighest.withValues(alpha: 0.82),
       fallbackBorder: BorderSide(
@@ -175,19 +186,20 @@ class _SettingsTileState extends State<SettingsTile> {
                   horizontal: LayoutConstants.spacingMd,
                   vertical: LayoutConstants.spacingXs,
                 ),
-                // A neutral tile rather than an amber one: with every row
-                // carrying an icon, colouring them all made the accent mean
-                // nothing. It is kept for the controls that act on something.
+                // The glyph without a tile around it. A filled square on
+                // every row made a column of settings read as a column of
+                // badges; Harbor draws the mark and nothing else.
                 leading:
                     widget.leading ??
-                    Container(
-                      padding: const EdgeInsets.all(LayoutConstants.spacingXs),
-                      decoration: BoxDecoration(
-                        color: onSurface.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
+                    SizedBox.square(
+                      dimension: 24,
+                      child: Icon(
+                        widget.icon,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        size: 21,
                       ),
-                      child: Icon(widget.icon, color: onSurface, size: 20),
                     ),
+                minLeadingWidth: 24,
                 title: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -252,13 +264,14 @@ class _SettingsTileState extends State<SettingsTile> {
           ),
         ),
         if (!widget.isLast && !_isFocused)
+          // A hairline between rows, not a box around them.
           Divider(
             height: 1,
             indent: LayoutConstants.spacingMd,
             endIndent: LayoutConstants.spacingMd,
             color: Theme.of(
               context,
-            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.14),
+            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.12),
           ),
       ],
     );

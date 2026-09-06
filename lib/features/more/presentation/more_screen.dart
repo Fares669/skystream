@@ -328,7 +328,10 @@ class _MoreTile extends StatelessWidget {
     return AppleLiquidGlassSurface(
       borderRadius: BorderRadius.circular(18),
       interactive: true,
-      fallbackColor: colors.surfaceContainerHighest.withValues(alpha: 0.4),
+      // One blur per row, in a list that scrolls: the cost lands on every
+      // frame and buys a blurred copy of the flat page behind it.
+      fallbackBlur: false,
+      fallbackColor: colors.surfaceContainerHighest.withValues(alpha: 0.75),
       fallbackBorder: BorderSide(
         color: colors.onSurfaceVariant.withValues(alpha: 0.1),
       ),
