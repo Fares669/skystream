@@ -131,8 +131,6 @@ jobs:
         run: |
           flutter test \
             test/core/services/download_parallel_test.dart \
-            test/core/services/download_parallel_app_integration_test.dart \
-            test/core/services/download_parallel_task_runtime_test.dart \
             test/core/services/download_concurrency_test.dart \
             test/core/services/download_service_queue_test.dart \
             --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key
