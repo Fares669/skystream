@@ -1,5 +1,0 @@
-{
-  "name": "AnimeWitcher (Flutter + Android)",
-  "snapshot": "snapshot-20260825-e6ce6e3a-d744-4e93-8b26-fd3c82e3664c",
-  "install": "export ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk && export PATH=\"/opt/flutter/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/cmdline-tools/latest/bin:$PATH\" && flutter pub get && flutter gen-l10n && dart run build_runner build --delete-conflicting-outputs"
-}

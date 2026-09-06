@@ -14,13 +14,15 @@ class SegmentedDownloadProgress extends StatelessWidget {
     required this.backgroundColor,
     required this.borderRadius,
     this.chunkProgress,
-  });
+    this.height = 4,
+  }) : assert(height > 0);
 
   final Task task;
   final double value;
   final Color backgroundColor;
   final BorderRadius borderRadius;
   final Map<String, double>? chunkProgress;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +46,7 @@ class SegmentedDownloadProgress extends StatelessWidget {
       child: ClipRRect(
         borderRadius: borderRadius,
         child: SizedBox(
-          height: 4,
+          height: height,
           child: hasRealChunkProgress
               ? _RealChunkProgress(
                   parts: parts,

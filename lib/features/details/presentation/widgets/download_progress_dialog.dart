@@ -1,9 +1,13 @@
+import 'dart:async';
+
+import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:background_downloader/background_downloader.dart';
+
 import '../../../../core/services/download_service.dart';
-import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../core/utils/download_time_remaining.dart';
+import '../../../../core/utils/file_size_formatter.dart';
+import '../../../library/presentation/widgets/segmented_download_progress.dart';
 import 'package:animewitcher/l10n/generated/app_localizations.dart';
 
 class DownloadProgressDialog extends ConsumerStatefulWidget {
@@ -32,6 +36,11 @@ class DownloadProgressDialog extends ConsumerStatefulWidget {
 class _DownloadProgressDialogState
     extends ConsumerState<DownloadProgressDialog> {
   bool _dismissRequested = false;
+  String? _downloadTaskId;
+  Task? _downloadTask;
+  bool _taskLookupInFlight = false;
+  bool _initialTaskLookupAttempted = false;
+  bool _transferTaskLookupAttempted = false;
 
   void _dismissOnce() {
     if (_dismissRequested) return;
@@ -60,6 +69,50 @@ class _DownloadProgressDialogState
     }
   }
 
+  void _ensureDownloadTask(DownloadProgressData data) {
+    final taskId = data.taskId;
+    if (_downloadTaskId != taskId) {
+      _downloadTaskId = taskId;
+      _downloadTask = null;
+      _taskLookupInFlight = false;
+      _initialTaskLookupAttempted = false;
+      _transferTaskLookupAttempted = false;
+    }
+
+    final transferStarted =
+        data.progress > 0 ||
+        data.status == TaskStatus.running ||
+        data.status == TaskStatus.paused;
+    final shouldLookup =
+        !_initialTaskLookupAttempted ||
+        (transferStarted &&
+            !_transferTaskLookupAttempted &&
+            _downloadTask is! ParallelDownloadTask);
+    if (!shouldLookup || _taskLookupInFlight) return;
+
+    _taskLookupInFlight = true;
+    if (!_initialTaskLookupAttempted) {
+      _initialTaskLookupAttempted = true;
+    } else if (transferStarted) {
+      _transferTaskLookupAttempted = true;
+    }
+    unawaited(_resolveDownloadTask(taskId));
+  }
+
+  Future<void> _resolveDownloadTask(String taskId) async {
+    Task? task;
+    try {
+      task = await FileDownloader().taskForId(taskId);
+      task ??= (await FileDownloader().database.recordForId(taskId))?.task;
+    } catch (_) {}
+
+    if (!mounted || _downloadTaskId != taskId) return;
+    setState(() {
+      _downloadTask = task;
+      _taskLookupInFlight = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final progressMap = ref.watch(downloadProgressProvider);
@@ -73,7 +126,10 @@ class _DownloadProgressDialogState
       return const SizedBox.shrink();
     }
 
+    _ensureDownloadTask(data);
+    final chunkProgress = ref.watch(downloadChunkProgressProvider)[data.taskId];
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Dialog(
@@ -81,128 +137,139 @@ class _DownloadProgressDialogState
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                data.status == TaskStatus.paused
-                    ? l10n.downloadPaused
-                    : l10n.downloading,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                widget.title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.status == TaskStatus.paused
+                      ? l10n.downloadPaused
+                      : l10n.downloading,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: data.progress,
-                      borderRadius: BorderRadius.circular(4),
-                      minHeight: 8,
+                const SizedBox(height: 8),
+                Text(
+                  widget.title,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _downloadTask == null
+                          ? LinearProgressIndicator(
+                              value: data.progress,
+                              borderRadius: BorderRadius.circular(4),
+                              minHeight: 8,
+                            )
+                          : SegmentedDownloadProgress(
+                              task: _downloadTask!,
+                              value: data.progress,
+                              chunkProgress: chunkProgress,
+                              backgroundColor: theme.dividerColor.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                              height: 8,
+                            ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Text(
-                    '${(data.progress * 100).toInt()}%',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.data_usage_rounded,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    formatDownloadSizePair(
-                      totalBytes: data.totalSize,
-                      progress: data.progress,
-                      fractionDigits: 2,
+                    const SizedBox(width: 16),
+                    Text(
+                      '${(data.progress * 100).toInt()}%',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    textDirection: TextDirection.ltr,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildInfoItem(
-                    context,
-                    Icons.speed_rounded,
-                    l10n.speed,
-                    formatDownloadSpeed(data, l10n),
-                    valueTextDirection: TextDirection.ltr,
-                  ),
-                  _buildInfoItem(
-                    context,
-                    Icons.timer_outlined,
-                    l10n.remaining,
-                    formatDownloadTimeRemaining(context, data, l10n),
-                    valueTextDirection:
-                        Localizations.localeOf(context).languageCode == 'ar'
-                        ? TextDirection.rtl
-                        : TextDirection.ltr,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (data.progress < 1.0) ...[
-                    TextButton(
-                      onPressed: () => _cancelDownload(data),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                      child: Text(l10n.cancel),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () async {
-                        final service = ref.read(downloadServiceProvider);
-                        if (data.status == TaskStatus.paused) {
-                          await service.resumeDownload(data.taskId);
-                        } else {
-                          await service.pauseDownload(data.taskId);
-                        }
-                      },
-                      child: Text(
-                        data.status == TaskStatus.paused
-                            ? l10n.resume
-                            : l10n.pause,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                   ],
-                  TextButton(
-                    onPressed: _dismissOnce,
-                    child: Text(l10n.close),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.data_usage_rounded,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      formatDownloadSizePair(
+                        totalBytes: data.totalSize,
+                        progress: data.progress,
+                        fractionDigits: 2,
+                      ),
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildInfoItem(
+                      context,
+                      Icons.speed_rounded,
+                      l10n.speed,
+                      formatDownloadSpeed(data, l10n),
+                      valueTextDirection: TextDirection.ltr,
+                    ),
+                    _buildInfoItem(
+                      context,
+                      Icons.timer_outlined,
+                      l10n.remaining,
+                      formatDownloadTimeRemaining(context, data, l10n),
+                      valueTextDirection:
+                          Localizations.localeOf(context).languageCode == 'ar'
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (data.progress < 1.0) ...[
+                      TextButton(
+                        onPressed: () => _cancelDownload(data),
+                        style: TextButton.styleFrom(
+                          foregroundColor: theme.colorScheme.error,
+                        ),
+                        child: Text(l10n.cancel),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () async {
+                          final service = ref.read(downloadServiceProvider);
+                          if (data.status == TaskStatus.paused) {
+                            await service.resumeDownload(data.taskId);
+                          } else {
+                            await service.pauseDownload(data.taskId);
+                          }
+                        },
+                        child: Text(
+                          data.status == TaskStatus.paused
+                              ? l10n.resume
+                              : l10n.pause,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    TextButton(
+                      onPressed: _dismissOnce,
+                      child: Text(l10n.close),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 

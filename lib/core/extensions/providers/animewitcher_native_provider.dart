@@ -3167,6 +3167,20 @@ class AnimeWitcherNativeProvider extends AnimeWitcherProvider {
       'awMalScoringUsers',
       details['mal_num_scoring_users'] ?? details['mal_scoring_users'],
     );
+    // APK animations without a MAL score use the stored IMDb rating. Keep the
+    // server value in syncData so the details UI can reproduce that fallback
+    // without scraping IMDb or issuing a second metadata request.
+    putSync(
+      'awImdbScore',
+      details['imdb_rate'] ??
+          details['imdbRate'] ??
+          details['imdb_score'] ??
+          details['imdbScore'] ??
+          source['imdb_rate'] ??
+          source['imdbRate'] ??
+          source['imdb_score'] ??
+          source['imdbScore'],
+    );
     // APK details score is `rating.rate`. Do not fall back to `average_rate`.
     putSync('awScore', rating['rate']);
     // Vote count is only shown when a real count field exists on the map.
