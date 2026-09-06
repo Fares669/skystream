@@ -55,20 +55,25 @@ class AnimePosterShimmer extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsetsDirectional.only(top: 6, start: 2, end: 2),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _line(
-                widthFactor: 0.82,
-                height: characterCaptionSpace
-                    ? characterTitleHeight
-                    : titleHeight,
-              ),
-              if (!characterCaptionSpace) ...[
-                const SizedBox(height: 2),
-                _line(widthFactor: 0.52, height: subtitleHeight),
+          child: Directionality(
+            // Real catalog card captions stay physically left-aligned even
+            // when their surrounding rail follows Arabic RTL ordering.
+            textDirection: TextDirection.ltr,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _line(
+                  widthFactor: 0.82,
+                  height: characterCaptionSpace
+                      ? characterTitleHeight
+                      : titleHeight,
+                ),
+                if (!characterCaptionSpace) ...[
+                  const SizedBox(height: 2),
+                  _line(widthFactor: 0.52, height: subtitleHeight),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
