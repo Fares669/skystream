@@ -59,8 +59,8 @@ class _DelayedSeasonsProvider extends AnimeWitcherNativeProvider {
     int offset = 0,
     int limit = 30,
   }) async {
-    return const ProviderMediaPage(
-      items: <MultimediaItem>[],
+    return ProviderMediaPage(
+      items: const <MultimediaItem>[],
       nextOffset: 0,
       hasMore: false,
     );
