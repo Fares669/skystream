@@ -77,4 +77,31 @@ void main() {
       expect(indicators.single.value, 0.35);
     },
   );
+
+  testWidgets('supports the thicker progress bar used by the download dialog', (
+    tester,
+  ) async {
+    final task = ParallelDownloadTask(
+      taskId: 'episode-dialog',
+      url: 'https://example.com/episode.mp4',
+      chunks: 6,
+    );
+
+    await tester.pumpWidget(
+      host(
+        SegmentedDownloadProgress(
+          task: task,
+          value: 0.31,
+          backgroundColor: Colors.black12,
+          borderRadius: BorderRadius.circular(4),
+          height: 8,
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byType(SegmentedDownloadProgress)).height,
+      8,
+    );
+  });
 }
