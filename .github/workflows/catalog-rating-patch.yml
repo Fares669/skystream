@@ -25,7 +25,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply catalog rating implementation
-        run: python3 .github/catalog_rating_patch/apply.py
+        run: |
+          python3 .github/catalog_rating_patch/apply.py
+          python3 .github/catalog_rating_patch/fix_tests.py
 
       - uses: subosito/flutter-action@v2
         with:
