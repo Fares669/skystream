@@ -34,6 +34,7 @@ jobs:
           python3 .github/parallel_patch/augment.py
           python3 .github/parallel_patch/fix_types.py
           python3 .github/parallel_patch/fix_queue_tests_v2.py
+          python3 .github/parallel_patch/fix_memory_storage_parallel.py
 
       - name: Update legacy HoldingQueue expectations
         shell: bash
@@ -120,27 +121,44 @@ jobs:
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Download settings integration tests
-        id: settings_tests
+        shell: bash
+        run: |
+          flutter test test/features/settings/presentation/download_concurrency_settings_test.dart \
+            --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key
+
+      - name: Focused parallel and queue tests
+        shell: bash
+        run: |
+          flutter test \
+            test/core/services/download_parallel_test.dart \
+            test/core/services/download_parallel_app_integration_test.dart \
+            test/core/services/download_parallel_task_runtime_test.dart \
+            test/core/services/download_concurrency_test.dart \
+            test/core/services/download_service_queue_test.dart \
+            --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key
+
+      - name: Full Flutter test suite
         shell: bash
         run: |
           set +e
-          flutter test test/features/settings/presentation/download_concurrency_settings_test.dart \
-            --reporter expanded \
-            --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key \
-            > /tmp/download-settings-test.log 2>&1
+          flutter test --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key > /tmp/full-flutter-test.log 2>&1
           status=$?
-          echo "=== DOWNLOAD SETTINGS TEST FAILURE EXCERPT ==="
-          grep -n -E -B 20 -A 60 "TestFailure|Expected:|Actual:|Exception|EXCEPTION|Some tests failed|══╡" /tmp/download-settings-test.log || true
-          echo "=== DOWNLOAD SETTINGS TEST TAIL ==="
-          tail -n 220 /tmp/download-settings-test.log
+          if [ "$status" -ne 0 ]; then
+            echo "=== FULL SUITE FAILURE EXCERPT ==="
+            grep -n -E -B 20 -A 70 "TestFailure|Expected:|Actual:|Exception|EXCEPTION|Some tests failed|══╡|Failing tests:" /tmp/full-flutter-test.log || true
+            echo "=== FULL SUITE TAIL ==="
+            tail -n 260 /tmp/full-flutter-test.log
+          else
+            tail -n 30 /tmp/full-flutter-test.log
+          fi
           exit $status
 
-      - name: Upload isolated settings test log
+      - name: Upload full Flutter test log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: download-settings-test-log
-          path: /tmp/download-settings-test.log
+          name: full-flutter-test-log
+          path: /tmp/full-flutter-test.log
           if-no-files-found: ignore
 
       - name: Show final diff summary
