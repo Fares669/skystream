@@ -16,6 +16,8 @@ import '../../../../core/providers/device_info_provider.dart';
 
 import '../../../../shared/widgets/thumbnail_error_placeholder.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
+import '../../../details/presentation/details_ratings.dart';
+import '../../../../l10n/generated/app_localizations.dart';
 
 /// Lightweight controller for the hero carousel.
 /// API-compatible with the old CarouselSliderController (nextPage/previousPage).
@@ -252,8 +254,10 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
             SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
             SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
             SingleActivator(LogicalKeyboardKey.arrowUp): _CarouselUpIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowLeft): _CarouselPrevIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowRight): _CarouselNextIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowLeft):
+                _CarouselPrevIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowRight):
+                _CarouselNextIntent(),
           },
           actions: <Type, Action<Intent>>{
             ActivateIntent: CallbackAction<ActivateIntent>(
@@ -305,12 +309,9 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
                               )
                             : null,
                       ),
-                      child: SizedBox(
-                        height: heroHeight,
-                        child: _buildCarouselStack(
-                          heroHeight,
-                          isDesktop: isDesktop || isTv,
-                        ),
+                      child: _buildFramedHero(
+                        heroHeight,
+                        isDesktop: isDesktop || isTv,
                       ),
                     ),
                   )
@@ -345,6 +346,45 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
   // Custom carousel with crossfade + scale transition
   // Entry: scale 0.8→1, opacity 0→1  |  Exit: scale 1→1.2, opacity 1→0  |  400ms
   // ---------------------------------------------------------------------------
+
+  /// The hero, run to the window's edges, with a way through it at each side.
+  ///
+  /// The arrows keep their physical sides whatever the language: one on the
+  /// left, one on the right, each pointing the way it moves the row.
+  Widget _buildFramedHero(double height, {required bool isDesktop}) {
+    return SizedBox(
+      height: height,
+      child: Stack(
+        children: [
+          _buildCarouselStack(height, isDesktop: isDesktop),
+          if (widget.movies.length > 1) ...[
+            Positioned(
+              left: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _HeroEdgeArrow(
+                  icon: Icons.chevron_left_rounded,
+                  onTap: _goToPreviousSlide,
+                ),
+              ),
+            ),
+            Positioned(
+              right: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _HeroEdgeArrow(
+                  icon: Icons.chevron_right_rounded,
+                  onTap: _goToNextSlide,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _buildCarouselStack(double height, {required bool isDesktop}) {
     return Stack(
@@ -563,6 +603,9 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
               builder: (BuildContext context, int? decodeWidth) =>
                   FallbackPosterImage(
                     imageUrl: imageUrl,
+                    // This frame is a banner; a poster looked up for it would
+                    // be the wrong shape.
+                    preferBanner: true,
                     malId: movie.artworkLookupMalId,
                     title: movie.artworkLookupTitle,
                     fit: BoxFit.cover,
@@ -707,13 +750,16 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
             compactLandscape: compactLandscape,
           ),
         if (genres.isNotEmpty)
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: SizedBox(
-              width: double.infinity,
+          // Under the name and on the same edge as it. Pinned left to right
+          // in a box the width of the window, the line ran to the far side
+          // of the screen from the title it belongs to.
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: Directionality.of(context),
               child: Text(
                 genres,
-                textAlign: isDesktop ? TextAlign.left : TextAlign.center,
+                textAlign: isDesktop ? TextAlign.start : TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelSmall?.copyWith(
@@ -722,8 +768,111 @@ class _HomeHeroCarouselState extends ConsumerState<HomeHeroCarousel>
               ),
             ),
           ),
+        if (isDesktop) ...[
+          if ((movie.description ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            // Enough of the story to decide by, held to a readable measure.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Text(
+                movie.description!.trim(),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.82),
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          _buildHeroActions(context, movie, theme),
+        ],
       ],
     );
+  }
+
+  /// Start watching, keep for later, and what it scores.
+  Widget _buildHeroActions(
+    BuildContext context,
+    MultimediaItem movie,
+    ThemeData theme,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final malMean = AnimeDetailsRatings.fromItem(movie).malMean;
+    return Wrap(
+      spacing: 14,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        // White, and the only filled thing on the artwork: it is what the
+        // banner is advertising.
+        Material(
+          color: const Color(0xFFF2F3F5),
+          borderRadius: BorderRadius.circular(24),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => _startWatching(context, movie),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.play_arrow_rounded,
+                    size: 22,
+                    color: Color(0xFF101114),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    l10n.play,
+                    style: const TextStyle(
+                      color: Color(0xFF101114),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (malMean != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'MAL',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                malMean.toStringAsFixed(malMean >= 10 ? 0 : 1),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  void _startWatching(BuildContext context, MultimediaItem movie) {
+    if (widget.onTap != null) {
+      widget.onTap!(movie);
+      return;
+    }
+    // Straight into the episode, rather than the page about it: the button
+    // says watching, so it should not stop at a description.
+    DetailsRoute(
+      $extra: DetailsRouteExtra(item: movie, autoPlay: true),
+    ).push<void>(context);
   }
 
   Widget _buildLogo(
@@ -925,6 +1074,38 @@ class _ProgressDotState extends State<_ProgressDot>
               : null,
         );
       },
+    );
+  }
+}
+
+/// One of the two ways through the hero, at the edge of the artwork.
+class _HeroEdgeArrow extends StatelessWidget {
+  const _HeroEdgeArrow({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox.square(
+          dimension: 46,
+          child: Icon(
+            icon,
+            size: 30,
+            // Held left to right: these point at the edges they sit on, and
+            // a mirrored chevron on an Arabic page pointed back into the
+            // banner it was meant to lead out of.
+            textDirection: TextDirection.ltr,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+        ),
+      ),
     );
   }
 }

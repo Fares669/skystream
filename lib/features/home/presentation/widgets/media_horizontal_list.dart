@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/layout_constants.dart';
-import '../../../../shared/widgets/cards_wrapper.dart';
 import '../../../../shared/widgets/paged_rail.dart';
 
 import '../../../../core/utils/responsive_breakpoints.dart';
@@ -129,24 +128,6 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     super.dispose();
   }
 
-  void _scrollPhysical({required bool right, required double amount}) {
-    if (!_scrollController.hasClients) return;
-    final position = _scrollController.position;
-    final increasesTowardRight = position.axisDirection == AxisDirection.right;
-    final increaseOffset = right == increasesTowardRight;
-    final target = (_scrollController.offset +
-            (increaseOffset ? amount : -amount))
-        .clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
-    );
-    _scrollController.animateTo(
-      target,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (widget.mediaList.isEmpty) return const SizedBox.shrink();
@@ -182,28 +163,9 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
         children: [
           HomeSectionHeader(
             title: widget.title,
-            middle: isDesktop
-                ? <Widget>[
-                    const SizedBox(width: 8),
-                    _HeaderArrowButton(
-                      icon: Icons.chevron_right,
-                      // Stride-aligned (one card per click) so the rail's
-                      // snap logic doesn't re-animate after an arrow click.
-                      onTap: () => _scrollPhysical(
-                        right: true,
-                        amount: cardWidth + spacing,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    _HeaderArrowButton(
-                      icon: Icons.chevron_left,
-                      onTap: () => _scrollPhysical(
-                        right: false,
-                        amount: cardWidth + spacing,
-                      ),
-                    ),
-                  ]
-                : null,
+            // No arrows: the rail is dragged with the mouse and carried by
+            // the wheel, and a pair of chevrons in every header was two more
+            // things to look at on a page made of artwork.
             action: widget.showViewAll
                 ? HomeViewAllButton(
                     onTap: () {
@@ -258,8 +220,9 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
                       if (widget.onTap != null) {
                         widget.onTap!(item);
                       } else {
-                        DetailsRoute($extra: DetailsRouteExtra(item: item))
-                            .push<void>(context);
+                        DetailsRoute(
+                          $extra: DetailsRouteExtra(item: item),
+                        ).push<void>(context);
                       }
                     },
                   ),
@@ -274,31 +237,3 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
 }
 
 /// Small arrow button used in section headers on desktop.
-class _HeaderArrowButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _HeaderArrowButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return CardsWrapper(
-      scaleFactor: 1.01,
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 28,
-        height: 28,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.4,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 12, color: theme.colorScheme.onSurface),
-      ),
-    );
-  }
-}

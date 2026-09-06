@@ -79,8 +79,8 @@ class HomeSectionHeader extends StatelessWidget {
   }
 }
 
-/// "عرض الكل" with the chevron on the left of the label, pinned to the
-/// left of the home section header.
+/// "عرض الكل" with a chevron pointing the way the language reads: to the
+/// left in Arabic, to the right in English. Pinned to the header's end edge.
 class HomeViewAllButton extends StatelessWidget {
   const HomeViewAllButton({super.key, required this.onTap});
 
@@ -104,28 +104,23 @@ class HomeViewAllButton extends StatelessWidget {
           color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.arrow_forward_ios,
-                size: 10,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.viewAll,
+              style: TextStyle(
                 color: color,
-                textDirection: TextDirection.ltr,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(width: 4),
-              Text(
-                l10n.viewAll,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 4),
+            // Onwards, whichever way that is: the arrow was pinned pointing
+            // right while the page around it read right to left, so it
+            // pointed back at the row it was meant to lead away from.
+            Icon(Icons.arrow_forward_ios, size: 10, color: color),
+          ],
         ),
       ),
     );
