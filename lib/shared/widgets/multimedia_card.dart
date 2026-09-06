@@ -34,7 +34,8 @@ class MultimediaCardLayout {
     BuildContext context, {
     double fallback = 16,
   }) {
-    if (context.isHandsetLandscape) return handsetLandscapeGridHorizontalPadding;
+    if (context.isHandsetLandscape)
+      return handsetLandscapeGridHorizontalPadding;
     if (context.isHandset) return handsetPortraitGridHorizontalPadding;
     return fallback;
   }
@@ -158,6 +159,9 @@ class MultimediaCard extends StatelessWidget {
   /// Smaller gray line under the title: episode time or catalog type.
   final String? subtitle;
 
+  /// Rating already carried by the catalog payload; never loaded by the card.
+  final CatalogRating? catalogRating;
+
   /// Release year drawn on the bottom-right of the poster.
   final int? year;
 
@@ -186,6 +190,7 @@ class MultimediaCard extends StatelessWidget {
     this.episodeBadge,
     this.showImageLoadingShimmer = true,
     this.subtitle,
+    this.catalogRating,
     this.year,
     this.posterBadge,
     this.malId,
@@ -209,6 +214,9 @@ class MultimediaCard extends StatelessWidget {
        title = item.title,
        episodeBadge = item.episodeBadge,
        subtitle = multimediaCardSubtitle(item),
+       catalogRating = hasLatestEpisodeBadge(item)
+           ? null
+           : catalogRatingFor(item),
        year = multimediaCardYear(item),
        posterBadge = multimediaCardPosterBadge(
          item,
@@ -285,6 +293,16 @@ class MultimediaCard extends StatelessWidget {
     if (cornerBadge != null) semanticParts.add(cornerBadge);
     if (yearText != null) semanticParts.add(yearText);
     if (caption != null) semanticParts.add(caption);
+    if (catalogRating != null) {
+      final source = switch (catalogRating!.source) {
+        CatalogRatingSource.mal => 'MAL',
+        CatalogRatingSource.imdb => 'IMDb',
+        CatalogRatingSource.animeWitcher => 'AnimeWitcher',
+      };
+      semanticParts.add(
+        '$source ${formatCatalogRatingScore(catalogRating!.score)}',
+      );
+    }
     final semanticLabel = semanticParts.join('، ');
 
     return Semantics(
@@ -311,6 +329,7 @@ class MultimediaCard extends StatelessWidget {
                 cornerBadge: cornerBadge,
                 yearText: yearText,
                 caption: caption,
+                rating: catalogRating,
               ),
             ),
           ),
@@ -433,11 +452,62 @@ class MultimediaCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCatalogRating(
+    BuildContext context,
+    CatalogRating rating,
+    TextStyle subtitleTextStyle,
+  ) {
+    final score = Text(
+      formatCatalogRatingScore(rating.score),
+      maxLines: 1,
+      style: subtitleTextStyle,
+    );
+    final markerSize = (subtitleTextStyle.fontSize ?? 11) - 0.5;
+
+    final Widget marker = switch (rating.source) {
+      CatalogRatingSource.mal => Text(
+        'MAL',
+        key: const ValueKey('catalog-rating-mal'),
+        style: TextStyle(
+          color: const Color(0xFF2E51A2),
+          fontSize: markerSize,
+          height: 1.2,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      CatalogRatingSource.imdb => Text(
+        'IMDb',
+        key: const ValueKey('catalog-rating-imdb'),
+        style: TextStyle(
+          color: const Color(0xFFF5C518),
+          fontSize: markerSize,
+          height: 1.2,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      CatalogRatingSource.animeWitcher => Icon(
+        Icons.star_rounded,
+        key: const ValueKey('catalog-rating-animewitcher'),
+        color: Theme.of(context).colorScheme.primary,
+        size: (subtitleTextStyle.fontSize ?? 11) + 4,
+      ),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [marker, const SizedBox(width: 4), score],
+    );
+  }
+
   Widget _buildCaption({
+    required BuildContext context,
     required TextStyle titleTextStyle,
     required TextStyle subtitleTextStyle,
     required String? caption,
+    required CatalogRating? rating,
   }) {
+    final subtitleHeight =
+        (subtitleTextStyle.fontSize ?? 11) * (subtitleTextStyle.height ?? 1.2);
     return Padding(
       padding: const EdgeInsetsDirectional.only(top: 6, start: 2, end: 2),
       child: Directionality(
@@ -454,21 +524,33 @@ class MultimediaCard extends StatelessWidget {
               style: titleTextStyle,
             ),
             const SizedBox(height: 2),
-            if (caption != null)
-              Text(
-                caption,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                style: subtitleTextStyle,
+            if (caption != null || rating != null)
+              SizedBox(
+                height: subtitleHeight,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (caption != null)
+                      Flexible(
+                        fit: FlexFit.loose,
+                        child: Text(
+                          caption,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
+                          style: subtitleTextStyle,
+                        ),
+                      ),
+                    if (caption != null && rating != null)
+                      const SizedBox(width: 7),
+                    if (rating != null)
+                      _buildCatalogRating(context, rating, subtitleTextStyle),
+                  ],
+                ),
               )
             else
-              SizedBox(
-                height:
-                    (subtitleTextStyle.fontSize ?? 11) *
-                    (subtitleTextStyle.height ?? 1.2),
-              ),
+              SizedBox(height: subtitleHeight),
           ],
         ),
       ),
@@ -484,6 +566,7 @@ class MultimediaCard extends StatelessWidget {
     required String? cornerBadge,
     required String? yearText,
     required String? caption,
+    required CatalogRating? rating,
   }) {
     final poster = _buildPosterStack(
       context,
@@ -493,9 +576,11 @@ class MultimediaCard extends StatelessWidget {
       yearText: yearText,
     );
     final captionBlock = _buildCaption(
+      context: context,
       titleTextStyle: titleTextStyle,
       subtitleTextStyle: subtitleTextStyle,
       caption: caption,
+      rating: rating,
     );
 
     return LayoutBuilder(

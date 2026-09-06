@@ -1136,6 +1136,9 @@ class AnimeWitcherNativeProvider extends AnimeWitcherProvider {
     'poster',
     'aniList_poster',
     'details',
+    'mal_id',
+    'malId',
+    'rating',
     'dubbed',
   ];
 
@@ -1148,6 +1151,10 @@ class AnimeWitcherNativeProvider extends AnimeWitcherProvider {
     'type',
     'poster',
     'tags',
+    'details',
+    'mal_id',
+    'malId',
+    'rating',
   ];
 
   static const List<String> _carouselAttributes = <String>[
@@ -1606,6 +1613,45 @@ class AnimeWitcherNativeProvider extends AnimeWitcherProvider {
       hitSync['anilistId'] = hitAniListId;
       hitSync['anilist_id'] = hitAniListId;
     }
+
+    final hitDetails = _map(source['details']);
+    final hitRating = _map(source['rating']);
+    void putHitSync(String key, dynamic raw) {
+      final value = _text(raw);
+      if (value.isNotEmpty) hitSync[key] = value;
+    }
+
+    putHitSync('awMalScore', hitDetails['mal_mean'] ?? hitDetails['mal_score']);
+
+    var hitImdbId = _firstText(source, const <String>[
+      'imdb_id',
+      'imdbId',
+      'imdbID',
+    ]);
+    if (hitImdbId.isEmpty) {
+      hitImdbId = _firstText(hitDetails, const <String>[
+        'imdb_id',
+        'imdbId',
+        'imdbID',
+      ]);
+    }
+    if (hitImdbId.isNotEmpty) {
+      hitSync['imdbId'] = hitImdbId;
+      hitSync['imdb_id'] = hitImdbId;
+      hitSync['awImdbId'] = hitImdbId;
+    }
+    putHitSync(
+      'awImdbScore',
+      hitDetails['imdb_rate'] ??
+          hitDetails['imdbRate'] ??
+          hitDetails['imdb_score'] ??
+          hitDetails['imdbScore'] ??
+          source['imdb_rate'] ??
+          source['imdbRate'] ??
+          source['imdb_score'] ??
+          source['imdbScore'],
+    );
+    putHitSync('awScore', hitRating['rate']);
 
     return MultimediaItem(
       title: title.isEmpty ? 'AnimeWitcher' : title,
