@@ -357,6 +357,18 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 SettingsTile(
+                  icon: Icons.call_split_rounded,
+                  title: downloadPartsTitle(),
+                  subtitle: downloadPartsSubtitle(
+                    generalSettings.downloadParallelParts,
+                  ),
+                  onTap: () => showDownloadPartsDialog(
+                    context,
+                    ref,
+                    generalSettings.downloadParallelParts,
+                  ),
+                ),
+                SettingsTile(
                   icon: Icons.notifications_rounded,
                   title: downloadNotificationsTitle(),
                   subtitle: downloadNotificationsSubtitle(

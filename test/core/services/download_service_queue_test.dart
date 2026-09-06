@@ -38,9 +38,7 @@ void main() {
           .applyQueueSettings(maxConcurrent: 3);
 
       expect(storage.getDownloadConcurrency(), 3);
-      expect(configured, <(String, dynamic)>[
-        (Config.holdingQueue, (3, null, null)),
-      ]);
+      expect(configured, <(String, dynamic)>[(Config.holdingQueue, false)]);
     },
   );
 
@@ -64,6 +62,6 @@ void main() {
         .applyQueueSettings(maxConcurrent: 0);
 
     expect(storage.getDownloadConcurrency(), 1);
-    expect(configured!.single.$2, downloadHoldingQueueValue(1));
+    expect(configured!.single.$2, false);
   });
 }

@@ -14,6 +14,7 @@ import '../../../core/utils/responsive_breakpoints.dart';
 import '../../../shared/widgets/anime_catalog_shimmer.dart';
 import '../../../shared/widgets/catalog_ltr.dart';
 import '../../../shared/widgets/multimedia_card.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 import '../../details/presentation/details_screen.dart';
 import '../../../core/utils/window_controls_inset.dart';
 
@@ -139,7 +140,16 @@ class _SeasonsScreenState extends ConsumerState<SeasonsScreen>
         future: _bootstrapFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const AnimeCatalogShimmer();
+            return Column(
+              children: [
+                _SeasonTabs(controller: _tabController, isArabic: isArabic),
+                Expanded(
+                  child: _SeasonsLoadingBody(
+                    showSeasonTitle: _selectedTab != 3,
+                  ),
+                ),
+              ],
+            );
           }
           if (snapshot.hasError || !snapshot.hasData) {
             return _LoadError(
@@ -239,6 +249,47 @@ class SeasonListTitle extends StatelessWidget {
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
+    );
+  }
+}
+
+/// Loading counterpart of [SeasonListTitle]. It reserves the same vertical
+/// slot so the grid does not jump when the real season/year string arrives.
+class SeasonListTitleSkeleton extends StatelessWidget {
+  const SeasonListTitleSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.titleLarge;
+    final height = (style?.fontSize ?? 22) * (style?.height ?? 1.2);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Align(
+        alignment: Alignment.center,
+        child: ShimmerPlaceholder.rectangular(
+          key: const ValueKey('season-title-loading-skeleton'),
+          width: 156,
+          height: height,
+          borderRadius: 6,
+        ),
+      ),
+    );
+  }
+}
+
+class _SeasonsLoadingBody extends StatelessWidget {
+  const _SeasonsLoadingBody({required this.showSeasonTitle});
+
+  final bool showSeasonTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showSeasonTitle) const SeasonListTitleSkeleton(),
+        const Expanded(child: AnimeCatalogShimmer()),
+      ],
     );
   }
 }

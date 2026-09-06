@@ -10,6 +10,8 @@ import 'package:animewitcher/core/utils/episode_label.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/services/download_service.dart';
 import '../../../../core/services/download_concurrency.dart';
+import '../../../../core/services/download_parallel.dart';
+import 'segmented_download_progress.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../details/presentation/playback_launcher.dart';
 import '../downloads_provider.dart';
@@ -468,6 +470,10 @@ class _DownloadItemTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
+    final chunkProgress = ref.watch(
+      downloadChunkProgressProvider,
+    )[item.task.taskId];
+    final parallelParts = downloadTaskPartCount(item.task);
     final isDone = status == TaskStatus.complete;
     final isWorking =
         status == TaskStatus.running ||
@@ -596,7 +602,9 @@ class _DownloadItemTile extends ConsumerWidget {
                     ),
                     const SizedBox(width: LayoutConstants.spacingSm),
                     Text(
-                      '${(progress.clamp(0.0, 1.0) * 100).floor()}%',
+                      parallelParts > 1
+                          ? '$parallelParts×  ${(progress.clamp(0.0, 1.0) * 100).floor()}%'
+                          : '${(progress.clamp(0.0, 1.0) * 100).floor()}%',
                       textDirection: TextDirection.ltr,
                       textAlign: TextAlign.end,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -608,8 +616,10 @@ class _DownloadItemTile extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                LinearProgressIndicator(
+                SegmentedDownloadProgress(
+                  task: item.task,
                   value: progress,
+                  chunkProgress: chunkProgress,
                   backgroundColor: theme.dividerColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(LayoutConstants.radiusSm),
                 ),

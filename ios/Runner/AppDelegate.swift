@@ -7,6 +7,7 @@ import UserNotifications
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var downloadContinuedProcessingChannel: FlutterMethodChannel?
+  private var downloadChunkProgressObserver: NSObjectProtocol?
   private var liquidGlassPresenterChannel: FlutterMethodChannel?
   private var persistentGlassHeaderChannel: FlutterMethodChannel?
   private var persistentGlassHeaderController: ApplePersistentGlassHeaderNativeController?
@@ -322,6 +323,36 @@ import UserNotifications
       result(false)
 #endif
     }
+
+
+#if os(iOS)
+    if let previous = downloadChunkProgressObserver {
+      NotificationCenter.default.removeObserver(previous)
+    }
+    downloadChunkProgressObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("AnimeWitcherBackgroundDownloaderChunkUpdate"),
+      object: nil,
+      queue: .main
+    ) { [weak channel] notification in
+      guard let values = notification.userInfo,
+            let parentTaskId = values["parentTaskId"] as? String,
+            let chunkTaskId = values["chunkTaskId"] as? String,
+            !parentTaskId.isEmpty,
+            !chunkTaskId.isEmpty else { return }
+
+      var arguments: [String: Any] = [
+        "parentTaskId": parentTaskId,
+        "chunkTaskId": chunkTaskId,
+      ]
+      if let progress = values["progress"] as? NSNumber {
+        arguments["progress"] = progress.doubleValue
+      }
+      if let status = values["status"] as? NSNumber {
+        arguments["status"] = status.intValue
+      }
+      channel?.invokeMethod("chunkUpdate", arguments: arguments)
+    }
+#endif
 
 #if os(iOS)
     if #available(iOS 26.0, *) {

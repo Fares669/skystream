@@ -30,17 +30,16 @@ void main() {
     });
   });
 
-  group('holding queue tuple', () {
-    test('uses the user N with unconstrained host and group', () {
-      expect(downloadHoldingQueueValue(1), (1, null, null));
-      expect(downloadHoldingQueueValue(3), (3, null, null));
-      expect(downloadHoldingQueueValue(99), (5, null, null));
-
-      final config = downloadHoldingQueueGlobalConfig(2);
-      expect(config, hasLength(1));
-      expect(config.single.$1, Config.holdingQueue);
-      expect(config.single.$2, (2, null, null));
-    });
+  group('parallel-compatible queue configuration', () {
+    test(
+      'disables plugin holding queue so chunks cannot consume episode slots',
+      () {
+        final config = downloadHoldingQueueGlobalConfig(2);
+        expect(config, hasLength(1));
+        expect(config.single.$1, Config.holdingQueue);
+        expect(config.single.$2, false);
+      },
+    );
   });
 
   group('applyDownloadQueueSettings', () {
@@ -60,9 +59,7 @@ void main() {
 
         expect(applied, 5);
         expect(storage.getDownloadConcurrency(), 5);
-        expect(configured, <(String, dynamic)>[
-          (Config.holdingQueue, (5, null, null)),
-        ]);
+        expect(configured, <(String, dynamic)>[(Config.holdingQueue, false)]);
       },
     );
 
@@ -81,7 +78,7 @@ void main() {
         );
 
         expect(storage.getDownloadConcurrency(), 1);
-        expect(configured.single.$2, (1, null, null));
+        expect(configured.single.$2, false);
       },
     );
   });
@@ -665,7 +662,7 @@ void main() {
     });
 
     test(
-      'native snapshot waiters are HQ enqueued + leftover parked, never user-paused',
+      'native snapshot contains app-owned waiters, never starting or user-paused rows',
       () {
         expect(
           isNativeWaitingSnapshotWaiter(
@@ -673,7 +670,7 @@ void main() {
             queueWaiting: false,
             userPaused: false,
           ),
-          isTrue,
+          isFalse,
         );
         expect(
           isNativeWaitingSnapshotWaiter(
@@ -741,7 +738,7 @@ void main() {
     );
 
     test(
-      'iOS concurrency=1, two episodes: waiter is enqueued, overlay only when running',
+      'iOS concurrency=1, two episodes: app waiter promotes only after slot frees',
       () {
         final whileEp1Transfers = planDownloadQueue(
           maxConcurrent: 1,
@@ -753,8 +750,9 @@ void main() {
             ),
             DownloadQueueEntry(
               taskId: 'ep2',
-              status: TaskStatus.enqueued,
+              status: TaskStatus.paused,
               timestamp: 2,
+              queueWaiting: true,
             ),
           ],
         );
@@ -774,26 +772,22 @@ void main() {
             ),
             DownloadQueueEntry(
               taskId: 'ep2',
-              status: TaskStatus.enqueued,
+              status: TaskStatus.paused,
               timestamp: 2,
+              queueWaiting: true,
             ),
           ],
         );
         expect(afterEp1Finishes.occupiedCount, 0);
         expect(afterEp1Finishes.waitingFifoIds, ['ep2']);
-        expect(afterEp1Finishes.idsToPromote, isEmpty);
+        expect(afterEp1Finishes.idsToPromote, ['ep2']);
         expect(
           shouldAttachToLiveNativeTask(
             taskId: 'ep2',
             trackingUrl: 'https://cdn.test/ep2',
-            live: const [
-              LiveNativeDownload(
-                taskId: 'ep2',
-                trackingUrl: 'https://cdn.test/ep2',
-              ),
-            ],
+            live: const [],
           ),
-          isTrue,
+          isFalse,
         );
         expect(shouldStartDownloadLiveActivity(TaskStatus.running), isTrue);
         expect(shouldStartDownloadLiveActivity(TaskStatus.enqueued), isFalse);
@@ -897,13 +891,15 @@ void main() {
         ),
         DownloadQueueEntry(
           taskId: 'ep7',
-          status: TaskStatus.enqueued,
+          status: TaskStatus.paused,
           timestamp: 2,
+          queueWaiting: true,
         ),
         DownloadQueueEntry(
           taskId: 'ep9',
-          status: TaskStatus.enqueued,
+          status: TaskStatus.paused,
           timestamp: 3,
+          queueWaiting: true,
         ),
       ];
       expect(occupiesDownloadSlot(status: TaskStatus.failed), isFalse);
@@ -1185,8 +1181,9 @@ void main() {
           ),
           DownloadQueueEntry(
             taskId: 'ep7',
-            status: TaskStatus.enqueued,
+            status: TaskStatus.paused,
             timestamp: 2,
+            queueWaiting: true,
           ),
           DownloadQueueEntry(
             taskId: 'ep8',
@@ -1198,7 +1195,7 @@ void main() {
       );
       expect(plan.occupiedCount, 0);
       expect(plan.waitingFifoIds, ['ep7']);
-      expect(plan.idsToPromote, isEmpty);
+      expect(plan.idsToPromote, ['ep7']);
     });
 
     test(
@@ -1245,14 +1242,15 @@ void main() {
           ),
           DownloadQueueEntry(
             taskId: 'ep8',
-            status: TaskStatus.enqueued,
+            status: TaskStatus.paused,
             timestamp: 3,
+            queueWaiting: true,
           ),
         ],
       );
       expect(plan.occupiedCount, 0);
       expect(plan.waitingFifoIds, ['ep8']);
-      expect(plan.idsToPromote, isEmpty);
+      expect(plan.idsToPromote, ['ep8']);
       expect(
         idsToStartAfterParkedFailure(
           maxConcurrent: 1,
@@ -1266,8 +1264,9 @@ void main() {
             ),
             DownloadQueueEntry(
               taskId: 'ep8',
-              status: TaskStatus.enqueued,
+              status: TaskStatus.paused,
               timestamp: 3,
+              queueWaiting: true,
             ),
           ],
         ),
@@ -1276,7 +1275,7 @@ void main() {
     });
 
     test(
-      'user resume while a slot is occupied waits and restacks later HQ waiters',
+      'user resume while a slot is occupied waits behind the active transfer',
       () {
         final plan = planUserResumeQueue(
           resumedId: 'ep7',
@@ -1296,8 +1295,9 @@ void main() {
             ),
             DownloadQueueEntry(
               taskId: 'ep8',
-              status: TaskStatus.enqueued,
+              status: TaskStatus.paused,
               timestamp: 3,
+              queueWaiting: true,
             ),
           ],
         );
@@ -1345,7 +1345,7 @@ void main() {
     });
 
     test(
-      'resume with a free slot and first in FIFO starts now and restacks later waiters',
+      'resume with a free slot and first in FIFO starts now ahead of later waiters',
       () {
         final plan = planUserResumeQueue(
           resumedId: 'ep7',
@@ -1360,8 +1360,9 @@ void main() {
             ),
             DownloadQueueEntry(
               taskId: 'ep8',
-              status: TaskStatus.enqueued,
+              status: TaskStatus.paused,
               timestamp: 2,
+              queueWaiting: true,
             ),
           ],
         );

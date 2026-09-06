@@ -31,6 +31,13 @@ Future<void> _pumpCatalog(
   }
 }
 
+Finder _posterInCard(int index) {
+  final card = find.byType(AnimePosterShimmer).at(index);
+  return find
+      .descendant(of: card, matching: find.byType(ShimmerPlaceholder))
+      .first;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -45,17 +52,30 @@ void main() {
     );
   });
 
+  testWidgets('anime skeleton renders poster, name and metadata lines', (
+    tester,
+  ) async {
+    await _pumpCatalog(tester);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final firstCard = find.byType(AnimePosterShimmer).first;
+    expect(
+      find.descendant(
+        of: firstCard,
+        matching: find.byType(ShimmerPlaceholder),
+      ),
+      findsNWidgets(3),
+    );
+  });
+
   testWidgets('catalog skeleton poster matches the final bounded card size', (
     tester,
   ) async {
     await _pumpCatalog(tester);
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final shimmers = find.byType(ShimmerPlaceholder);
-    expect(shimmers, findsNWidgets(6));
-
-    final first = tester.getRect(shimmers.at(0));
-    final fourth = tester.getRect(shimmers.at(3));
+    final first = tester.getRect(_posterInCard(0));
+    final fourth = tester.getRect(_posterInCard(3));
     const expectedWidth =
         (390 -
             MultimediaCardLayout.handsetPortraitGridHorizontalPadding * 2 -
@@ -77,13 +97,12 @@ void main() {
     expect(reservedCaptionSpace, closeTo(expectedCaption, 0.75));
   });
 
-  testWidgets('character loading keeps a smaller empty caption area', (
+  testWidgets('character loading renders name only and keeps smaller caption', (
     tester,
   ) async {
     await _pumpCatalog(tester);
-    final animeShimmers = find.byType(ShimmerPlaceholder);
-    final animeFirst = tester.getRect(animeShimmers.at(0));
-    final animeFourth = tester.getRect(animeShimmers.at(3));
+    final animeFirst = tester.getRect(_posterInCard(0));
+    final animeFourth = tester.getRect(_posterInCard(3));
     final animeReserved =
         animeFourth.top -
         animeFirst.top -
@@ -92,14 +111,22 @@ void main() {
 
     await _pumpCatalog(tester, characterCaptionSpace: true);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final characterShimmers = find.byType(ShimmerPlaceholder);
-    final characterFirst = tester.getRect(characterShimmers.at(0));
-    final characterFourth = tester.getRect(characterShimmers.at(3));
+    final characterFirst = tester.getRect(_posterInCard(0));
+    final characterFourth = tester.getRect(_posterInCard(3));
     final characterReserved =
         characterFourth.top -
         characterFirst.top -
         characterFirst.height -
         MultimediaCardLayout.handsetPortraitGridMainAxisSpacing;
+
+    final firstCharacterCard = find.byType(AnimePosterShimmer).first;
+    expect(
+      find.descendant(
+        of: firstCharacterCard,
+        matching: find.byType(ShimmerPlaceholder),
+      ),
+      findsNWidgets(2),
+    );
 
     final context = tester.element(find.byType(AnimeCatalogShimmer));
     expect(
@@ -112,5 +139,43 @@ void main() {
     );
     expect(characterFirst.width, closeTo(animeFirst.width, 0.5));
     expect(characterReserved, lessThan(animeReserved));
+  });
+
+  testWidgets('poster caption skeleton stays left aligned inside RTL rails', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Center(
+              child: SizedBox(
+                width: 120,
+                height: 240,
+                child: const AnimePosterShimmer(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final card = find.byType(AnimePosterShimmer);
+    final placeholders = find.descendant(
+      of: card,
+      matching: find.byType(ShimmerPlaceholder),
+    );
+    expect(placeholders, findsNWidgets(3));
+
+    final cardRect = tester.getRect(card);
+    final titleRect = tester.getRect(placeholders.at(1));
+    final metadataRect = tester.getRect(placeholders.at(2));
+
+    expect(titleRect.left, closeTo(cardRect.left + 2, 0.5));
+    expect(metadataRect.left, closeTo(cardRect.left + 2, 0.5));
+    expect(titleRect.right, lessThan(cardRect.right));
+    expect(metadataRect.right, lessThan(cardRect.right));
   });
 }

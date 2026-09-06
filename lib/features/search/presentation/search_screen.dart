@@ -698,8 +698,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           child: Row(
             children: [
               Expanded(child: _buildMobileSearchField(context)),
-              const SizedBox(width: 10),
+              const SizedBox(width: 2),
               _buildMobileSearchActionGroup(context),
+              // Move 8pt of the original gap after the controls so the capsule
+              // sits closer to the field without shortening the search field.
+              const SizedBox(width: 8),
             ],
           ),
         ),

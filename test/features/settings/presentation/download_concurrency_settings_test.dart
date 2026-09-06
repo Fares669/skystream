@@ -88,6 +88,27 @@ void main() {
     expect(find.text(downloadConcurrencySubtitle(3)), findsOneWidget);
     expect(find.text(downloadConcurrencySubtitle(1)), findsNothing);
 
+    await tester.dragUntilVisible(
+      find.text(downloadPartsTitle()),
+      find.byType(Scrollable).first,
+      const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(downloadPartsTitle()), findsOneWidget);
+    expect(find.text(downloadPartsSubtitle(0)), findsOneWidget);
+
+    await tester.tap(find.text(downloadPartsTitle()));
+    await tester.pumpAndSettle();
+    expect(find.text('تلقائي'), findsWidgets);
+    expect(find.text('4'), findsOneWidget);
+
+    await tester.tap(find.text('4'));
+    await tester.pumpAndSettle();
+
+    expect(storage.getDownloadParallelParts(), 4);
+    expect(find.text(downloadPartsSubtitle(4)), findsOneWidget);
+
     final artifacts = Directory('/opt/cursor/artifacts');
     if (!artifacts.existsSync()) return;
 
