@@ -117,7 +117,26 @@ class ArtworkFallbackService {
 
   static String _titleKey(String title) => title.trim().toLowerCase();
 
+  /// Banners found for an id, kept apart from the posters.
+  ///
+  /// A banner is a different picture with a different shape, and an entry
+  /// that has one may still want a poster looked up, or the other way round.
+  /// Static like the others, so the answers outlive one screen.
+  static final Map<int, String?> _bannerCache = <int, String?>{};
+
+  static void _rememberBanner(int malId, String? url) {
+    _bannerCache.remove(malId);
+    _bannerCache[malId] = url;
+    while (_bannerCache.length > _cacheMax) {
+      _bannerCache.remove(_bannerCache.keys.first);
+    }
+  }
+
   String? cached(int malId) => _cache[malId];
+
+  String? cachedBanner(int malId) => _bannerCache[malId];
+
+  bool hasResolvedBanner(int malId) => _bannerCache.containsKey(malId);
 
   bool hasResolved(int malId) => _cache.containsKey(malId);
 
@@ -129,6 +148,8 @@ class ArtworkFallbackService {
   // --------------------------------------------------------------- batching
 
   final Map<int, Completer<String?>> _pendingIds = <int, Completer<String?>>{};
+  final Map<int, Completer<String?>> _pendingBanners =
+      <int, Completer<String?>>{};
   final Map<String, Completer<String?>> _pendingTitles =
       <String, Completer<String?>>{};
   final Map<String, String> _pendingTitleText = <String, String>{};
@@ -146,6 +167,28 @@ class ArtworkFallbackService {
 
     final completer = Completer<String?>();
     _pendingIds[malId] = completer;
+    _scheduleFlush();
+    return completer.future;
+  }
+
+  /// The wide artwork for [malId], the way Harbor resolves one: whatever
+  /// AniList carries, then AniZip's own mapping — which reaches TheTVDB's
+  /// backgrounds and Kitsu's cover — and nothing if none of them has it.
+  ///
+  /// Rides the same batch the posters do, so a screen of cards asking for
+  /// both costs one request rather than two.
+  Future<String?> bannerFor(int malId) {
+    if (malId <= 0) return Future<String?>.value();
+    if (_bannerCache.containsKey(malId)) {
+      final value = _bannerCache.remove(malId);
+      _bannerCache[malId] = value; // LRU touch
+      return Future<String?>.value(value);
+    }
+    final queued = _pendingBanners[malId];
+    if (queued != null) return queued.future;
+
+    final completer = Completer<String?>();
+    _pendingBanners[malId] = completer;
     _scheduleFlush();
     return completer.future;
   }
@@ -179,12 +222,23 @@ class ArtworkFallbackService {
   void _flush() {
     _flushTimer = null;
 
-    if (_pendingIds.isNotEmpty) {
-      final ids = _pendingIds.keys.take(_idsPerQuery).toList();
+    if (_pendingIds.isNotEmpty || _pendingBanners.isNotEmpty) {
+      // One query answers both: the ids waiting for a poster and the ids
+      // waiting for a banner go out together, since AniList returns each
+      // media's cover and banner in the same record.
+      final ids = <int>{
+        ..._pendingIds.keys,
+        ..._pendingBanners.keys,
+      }.take(_idsPerQuery).toList();
       final waiting = <int, Completer<String?>>{
-        for (final id in ids) id: _pendingIds.remove(id)!,
+        for (final id in ids)
+          if (_pendingIds.containsKey(id)) id: _pendingIds.remove(id)!,
       };
-      unawaited(_runIdBatch(ids, waiting));
+      final bannerWaiting = <int, Completer<String?>>{
+        for (final id in ids)
+          if (_pendingBanners.containsKey(id)) id: _pendingBanners.remove(id)!,
+      };
+      unawaited(_runIdBatch(ids, waiting, bannerWaiting));
     }
 
     if (_pendingTitles.isNotEmpty) {
@@ -199,16 +253,24 @@ class ArtworkFallbackService {
     }
 
     // More than one query's worth arrived at once; the rest go out next tick.
-    if (_pendingIds.isNotEmpty || _pendingTitles.isNotEmpty) _scheduleFlush();
+    if (_pendingIds.isNotEmpty ||
+        _pendingBanners.isNotEmpty ||
+        _pendingTitles.isNotEmpty) {
+      _scheduleFlush();
+    }
   }
 
   Future<void> _runIdBatch(
     List<int> ids,
     Map<int, Completer<String?>> waiting,
+    Map<int, Completer<String?>> bannerWaiting,
   ) async {
     Map<int, String> found;
+    var banners = <int, String>{};
     try {
-      found = await _aniListByMalIds(ids);
+      final result = await _aniListByMalIds(ids);
+      found = result.covers;
+      banners = result.banners;
     } catch (e) {
       if (kDebugMode) debugPrint('[Artwork] AniList id batch failed: $e');
       found = <int, String>{};
@@ -219,13 +281,28 @@ class ArtworkFallbackService {
     final missing = ids.where((id) => !found.containsKey(id)).toList();
     if (missing.isNotEmpty) {
       final extra = await Future.wait(
-        missing.map(
-          (id) => _aniZipPoster(id).catchError((Object _) => null),
-        ),
+        missing.map((id) => _aniZipPoster(id).catchError((Object _) => null)),
       );
       for (var i = 0; i < missing.length; i++) {
         final url = extra[i];
         if (url != null && url.isNotEmpty) found[missing[i]] = url;
+      }
+    }
+
+    // Anything still without a banner is worth one more ask: AniZip's
+    // mapping carries TheTVDB's backgrounds, and Kitsu's cover behind that.
+    final needBanner = bannerWaiting.keys
+        .where((id) => !banners.containsKey(id))
+        .toList();
+    if (needBanner.isNotEmpty) {
+      final extra = await Future.wait(
+        needBanner.map(
+          (id) => _aniZipBanner(id).catchError((Object _) => null),
+        ),
+      );
+      for (var i = 0; i < needBanner.length; i++) {
+        final url = extra[i];
+        if (url != null && url.isNotEmpty) banners[needBanner[i]] = url;
       }
     }
 
@@ -234,9 +311,17 @@ class ArtworkFallbackService {
     }
     for (final id in ids) {
       final url = found[id];
-      _remember(id, url);
-      _markDirty(url);
-      waiting[id]?.complete(url);
+      if (waiting.containsKey(id)) {
+        _remember(id, url);
+        _markDirty(url);
+        waiting[id]?.complete(url);
+      }
+      if (bannerWaiting.containsKey(id)) {
+        final banner = banners[id];
+        _rememberBanner(id, banner);
+        _markDirty(banner);
+        bannerWaiting[id]?.complete(banner);
+      }
     }
     _schedulePersist();
   }
@@ -254,7 +339,9 @@ class ArtworkFallbackService {
       found = <String, String>{};
     }
     if (kDebugMode) {
-      debugPrint('[Artwork] titles: ${keys.length} asked, ${found.length} found');
+      debugPrint(
+        '[Artwork] titles: ${keys.length} asked, ${found.length} found',
+      );
     }
     for (final key in keys) {
       final url = found[key];
@@ -269,26 +356,32 @@ class ArtworkFallbackService {
 
   /// Unknown ids are simply absent from the page, so one bad id cannot cost
   /// the rest of the screen its artwork.
-  Future<Map<int, String>> _aniListByMalIds(List<int> ids) async {
+  Future<({Map<int, String> covers, Map<int, String> banners})>
+  _aniListByMalIds(List<int> ids) async {
     const query =
         'query (\$ids: [Int]) { Page(perPage: $_idsPerQuery) { '
         'media(idMal_in: \$ids, type: ANIME) { '
-        'idMal coverImage { extraLarge large medium } } } }';
+        'idMal bannerImage coverImage { extraLarge large medium } } } }';
 
     final response = await _post(<String, dynamic>{
       'query': query,
       'variables': <String, dynamic>{'ids': ids},
     });
     final media = ((response?['data'] as Map?)?['Page'] as Map?)?['media'];
-    final out = <int, String>{};
-    if (media is! List) return out;
+    final covers = <int, String>{};
+    final banners = <int, String>{};
+    if (media is! List) return (covers: covers, banners: banners);
     for (final raw in media) {
       if (raw is! Map) continue;
       final idMal = raw['idMal'];
+      if (idMal is! num) continue;
+      final id = idMal.toInt();
       final url = _coverUrl(raw['coverImage']);
-      if (idMal is num && url != null) out[idMal.toInt()] = url;
+      if (url != null) covers[id] = url;
+      final banner = '${raw['bannerImage'] ?? ''}'.trim();
+      if (banner.isNotEmpty && banner != 'null') banners[id] = banner;
     }
-    return out;
+    return (covers: covers, banners: banners);
   }
 
   /// Searches are aliased into one document. `Page` is used rather than a bare
@@ -363,6 +456,65 @@ class ArtworkFallbackService {
       if (poster != null) return poster;
     }
     return _posterFromImages(data['images']);
+  }
+
+  /// The wide art AniZip knows about: TheTVDB's own backgrounds first, then
+  /// Kitsu's cover, which is the same shape.
+  Future<String?> _aniZipBanner(int malId) async {
+    final mapping = await _dio.get<Map<String, dynamic>>(
+      'https://api.ani.zip/mappings',
+      queryParameters: <String, dynamic>{'mal_id': malId},
+    );
+    final data = mapping.data;
+    if (data == null) return null;
+
+    final fromImages = _imageOfType(data['images'], const <String>[
+      'fanart',
+      'background',
+      'banner',
+    ]);
+    if (fromImages != null) return fromImages;
+
+    final kitsuId = (data['mappings'] as Map?)?['kitsu_id'];
+    final kitsu = kitsuId is num ? kitsuId.toInt() : null;
+    if (kitsu != null && kitsu > 0) return _kitsuCover(kitsu);
+    return null;
+  }
+
+  /// The first image whose `coverType` is one of [types], in that order.
+  String? _imageOfType(Object? images, List<String> types) {
+    if (images is! List) return null;
+    for (final type in types) {
+      for (final raw in images) {
+        if (raw is! Map) continue;
+        if ('${raw['coverType']}'.toLowerCase() != type) continue;
+        final url = '${raw['url']}'.trim();
+        if (url.isNotEmpty) return url;
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _kitsuCover(int kitsuId) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        'https://kitsu.app/api/edge/anime/$kitsuId',
+        options: Options(
+          headers: <String, String>{'Accept': 'application/vnd.api+json'},
+        ),
+      );
+      final cover =
+          ((response.data?['data'] as Map?)?['attributes']
+              as Map?)?['coverImage'];
+      if (cover is! Map) return null;
+      for (final size in const <String>['original', 'large', 'small']) {
+        final url = '${cover[size] ?? ''}'.trim();
+        if (url.isNotEmpty) return url;
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Artwork] Kitsu cover lookup failed: $e');
+    }
+    return null;
   }
 
   String? _posterFromImages(Object? images) {

@@ -20,9 +20,11 @@ class FallbackPosterImage extends ConsumerStatefulWidget {
     required this.imageUrl,
     required this.malId,
     this.title,
+    this.preferBanner = false,
     required this.placeholder,
     required this.errorWidget,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.width,
     this.height,
     this.memCacheWidth,
@@ -40,9 +42,21 @@ class FallbackPosterImage extends ConsumerStatefulWidget {
   /// only used when there is no id to use.
   final String? title;
 
+  /// Looks for wide artwork rather than a poster.
+  ///
+  /// A hero shows a banner, and the poster the lookup would otherwise return
+  /// is the wrong shape for it — cropped to a sliver and blown up past its
+  /// own resolution. Only the id path can answer this; a title search knows
+  /// no banner.
+  final bool preferBanner;
+
   final WidgetBuilder placeholder;
   final WidgetBuilder errorWidget;
   final BoxFit fit;
+
+  /// Which part of a picture survives the crop. A banner is anchored to its
+  /// top so faces are not cut off by the frame's own proportions.
+  final Alignment alignment;
   final double? width;
   final double? height;
   final int? memCacheWidth;
@@ -130,6 +144,15 @@ class _FallbackPosterImageState extends ConsumerState<FallbackPosterImage> {
     final title = widget.title?.trim() ?? '';
 
     String? cached;
+    if (widget.preferBanner) {
+      if (malId != null && malId > 0 && service.hasResolvedBanner(malId)) {
+        cached = service.cachedBanner(malId);
+        _lookedUp = true;
+      }
+      if (cached == null || cached.isEmpty) return;
+      _fallbackUrl = cached;
+      return;
+    }
     if (malId != null && malId > 0 && service.hasResolved(malId)) {
       cached = service.cached(malId);
       _lookedUp = true;
@@ -148,7 +171,8 @@ class _FallbackPosterImageState extends ConsumerState<FallbackPosterImage> {
   void _resolveWhenNothingToShow() {
     if (!artworkFallbackEnabled.value || _fallbackUrl != null) return;
     final url = widget.imageUrl.trim();
-    final doomed = url.isEmpty || (malArtworkUnreachable.value && isMalArtworkUrl(url));
+    final doomed =
+        url.isEmpty || (malArtworkUnreachable.value && isMalArtworkUrl(url));
     if (!doomed) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _resolveFallback();
@@ -162,7 +186,11 @@ class _FallbackPosterImageState extends ConsumerState<FallbackPosterImage> {
     final title = widget.title?.trim() ?? '';
 
     final String? url;
-    if (malId != null && malId > 0) {
+    if (widget.preferBanner) {
+      if (malId == null || malId <= 0) return;
+      _lookedUp = true;
+      url = await service.bannerFor(malId);
+    } else if (malId != null && malId > 0) {
       _lookedUp = true;
       url = await service.posterFor(malId);
     } else if (title.isNotEmpty) {
@@ -184,6 +212,7 @@ class _FallbackPosterImageState extends ConsumerState<FallbackPosterImage> {
     return CachedNetworkImage(
       imageUrl: url,
       fit: widget.fit,
+      alignment: widget.alignment,
       width: widget.width,
       height: widget.height,
       memCacheWidth: widget.memCacheWidth,
