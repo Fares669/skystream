@@ -5,7 +5,7 @@ import 'catalog_ltr.dart';
 import 'multimedia_card.dart';
 import 'shimmer_placeholder.dart';
 
-/// Skeleton poster matching home-page card loading.
+/// Skeleton card matching the real poster + caption layout.
 class AnimePosterShimmer extends StatelessWidget {
   const AnimePosterShimmer({
     super.key,
@@ -16,14 +16,35 @@ class AnimePosterShimmer extends StatelessWidget {
   final bool isPortrait;
   final bool characterCaptionSpace;
 
+  Widget _line({
+    required double widthFactor,
+    required double height,
+    double borderRadius = 4,
+  }) {
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: FractionallySizedBox(
+        widthFactor: widthFactor,
+        child: ShimmerPlaceholder.rectangular(
+          height: height,
+          borderRadius: borderRadius,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // A real catalog card receives a bounded grid-cell height and lets its
-    // poster expand into all space left above the caption. Mirror that exact
-    // structure here so replacing the skeleton never changes poster/card size.
-    final captionExtent = characterCaptionSpace
-        ? MultimediaCardLayout.characterCaptionExtent(context)
-        : MultimediaCardLayout.animeCaptionExtent(context);
+    final isDesktopLandscape = context.isDesktopLandscape;
+    final isDesktop = context.isDesktop;
+    final effectiveCompact = isDesktopLandscape;
+    final titleHeight =
+        (effectiveCompact ? 12.0 : (isDesktop ? 15.0 : 13.0)) * 1.2;
+    final subtitleHeight =
+        (effectiveCompact ? 10.0 : (isDesktop ? 12.0 : 11.0)) * 1.2;
+    final characterTitleHeight =
+        MultimediaCardLayout.characterCaptionExtent(context) - 6;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -32,7 +53,24 @@ class AnimePosterShimmer extends StatelessWidget {
             borderRadius: MultimediaCardLayout.posterRadius,
           ),
         ),
-        SizedBox(height: captionExtent),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(top: 6, start: 2, end: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _line(
+                widthFactor: 0.82,
+                height: characterCaptionSpace
+                    ? characterTitleHeight
+                    : titleHeight,
+              ),
+              if (!characterCaptionSpace) ...[
+                const SizedBox(height: 2),
+                _line(widthFactor: 0.52, height: subtitleHeight),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -52,8 +90,7 @@ class AnimeCatalogShimmer extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final ScrollPhysics? physics;
 
-  /// Character tiles only reserve one name line, so their empty caption area
-  /// is intentionally smaller than the anime title + type area.
+  /// Character tiles render the poster + one name skeleton only.
   final bool characterCaptionSpace;
 
   @override
