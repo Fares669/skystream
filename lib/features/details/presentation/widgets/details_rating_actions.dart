@@ -7,6 +7,8 @@
 /// the kind of thing that drifts apart, so both call these.
 library;
 
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -127,56 +129,118 @@ Future<int?> showAnimeRatingDialog(
   var rating = initialRating.clamp(0, 10);
   return showDialog<int>(
     context: context,
+    // Nothing behind it is worth hiding, and a solid panel over the artwork
+    // read as a plain grey box dropped on the page. The blur is what every
+    // other surface in the app is made of.
+    barrierColor: Colors.black.withValues(alpha: 0.45),
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setDialogState) {
+          final colors = Theme.of(context).colorScheme;
           return AlertDialog(
-            title: const Text('قيّم'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$rating /10',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            contentPadding: EdgeInsets.zero,
+            titlePadding: EdgeInsets.zero,
+            actionsPadding: EdgeInsets.zero,
+            content: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest.withValues(
+                      alpha: 0.55,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: colors.onSurfaceVariant.withValues(alpha: 0.14),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: ScaleRatingBar(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                    child: _ratingDialogBody(
+                      context,
                       rating: rating,
-                      starSize: 30,
-                      onChanged: (value) {
-                        setDialogState(() => rating = value);
-                      },
+                      initialRating: initialRating,
+                      dialogContext: dialogContext,
+                      onChanged: (value) =>
+                          setDialogState(() => rating = value),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-            actions: [
-              if (initialRating > 0)
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, 0),
-                  child: const Text('مسح التقييم'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('إلغاء'),
-              ),
-              FilledButton(
-                onPressed: rating <= 0
-                    ? null
-                    : () => Navigator.pop(dialogContext, rating),
-                child: const Text('تأكيد'),
-              ),
-            ],
           );
         },
       );
     },
+  );
+}
+
+Widget _ratingDialogBody(
+  BuildContext context, {
+  required int rating,
+  required int initialRating,
+  required BuildContext dialogContext,
+  required ValueChanged<int> onChanged,
+}) {
+  // A width to aim for, not one to insist on: a narrow window would
+  // otherwise be handed a 420px row of buttons and overflow it.
+  return ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 420),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'قيّم',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '$rating /10',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 12),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ScaleRatingBar(
+            rating: rating,
+            starSize: 30,
+            onChanged: onChanged,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            if (initialRating > 0)
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, 0),
+                child: const Text('مسح التقييم'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: rating <= 0
+                  ? null
+                  : () => Navigator.pop(dialogContext, rating),
+              child: const Text('تأكيد'),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }

@@ -33,6 +33,13 @@ class _ScaleRatingBarState extends State<ScaleRatingBar>
   late final Animation<double> _scale;
   int? _pulseIndex;
 
+  /// The star the pointer is over, if any.
+  ///
+  /// Hovering fills up to it, so a viewer sees the score they are about to
+  /// leave before committing to it — the same way the bar reads after they
+  /// have chosen.
+  int? _hoverIndex;
+
   @override
   void initState() {
     super.initState();
@@ -40,9 +47,10 @@ class _ScaleRatingBarState extends State<ScaleRatingBar>
       vsync: this,
       duration: const Duration(milliseconds: 420),
     );
-    _scale = Tween<double>(begin: 1, end: 1.28).animate(
-      CurvedAnimation(parent: _bounce, curve: Curves.elasticOut),
-    );
+    _scale = Tween<double>(
+      begin: 1,
+      end: 1.28,
+    ).animate(CurvedAnimation(parent: _bounce, curve: Curves.elasticOut));
   }
 
   @override
@@ -83,7 +91,8 @@ class _ScaleRatingBarState extends State<ScaleRatingBar>
               for (var index = 1; index <= widget.itemCount; index++)
                 _StarButton(
                   index: index,
-                  filled: index <= widget.rating,
+                  filled: index <= (_hoverIndex ?? widget.rating),
+                  previewing: _hoverIndex != null,
                   pulsing: index == _pulseIndex && _bounce.isAnimating,
                   scale: _scale.value,
                   size: widget.starSize,
@@ -91,6 +100,10 @@ class _ScaleRatingBarState extends State<ScaleRatingBar>
                   enabled: widget.enabled && widget.onChanged != null,
                   padding: widget.padding,
                   onPressed: () => _select(index),
+                  onHover: (hovering) {
+                    if (!widget.enabled || widget.onChanged == null) return;
+                    setState(() => _hoverIndex = hovering ? index : null);
+                  },
                 ),
             ],
           );
@@ -104,6 +117,7 @@ class _StarButton extends StatelessWidget {
   const _StarButton({
     required this.index,
     required this.filled,
+    required this.previewing,
     required this.pulsing,
     required this.scale,
     required this.size,
@@ -111,10 +125,15 @@ class _StarButton extends StatelessWidget {
     required this.enabled,
     required this.padding,
     required this.onPressed,
+    required this.onHover,
   });
 
   final int index;
   final bool filled;
+
+  /// Whether the fill is a hover preview rather than the score on record.
+  final bool previewing;
+
   final bool pulsing;
   final double scale;
   final double size;
@@ -122,6 +141,7 @@ class _StarButton extends StatelessWidget {
   final bool enabled;
   final EdgeInsets padding;
   final VoidCallback onPressed;
+  final ValueChanged<bool> onHover;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +151,11 @@ class _StarButton extends StatelessWidget {
       child: Icon(
         icon,
         size: size,
-        color: filled ? color : color.withValues(alpha: 0.38),
+        // A previewed star is a shade softer than a chosen one, so the bar
+        // still says which is a promise and which is a record.
+        color: filled
+            ? (previewing ? color.withValues(alpha: 0.75) : color)
+            : color.withValues(alpha: 0.38),
       ),
     );
     return Semantics(
@@ -140,6 +164,7 @@ class _StarButton extends StatelessWidget {
       label: '$index',
       child: InkWell(
         onTap: enabled ? onPressed : null,
+        onHover: onHover,
         customBorder: const CircleBorder(),
         child: Padding(padding: padding, child: child),
       ),
