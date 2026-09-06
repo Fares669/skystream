@@ -5,7 +5,19 @@ import 'package:animewitcher/core/navigation/taskbar_destination.dart';
 import 'package:animewitcher/shared/widgets/apple_liquid_glass.dart';
 import 'package:animewitcher/shared/widgets/custom_bottom_nav.dart';
 
+import '../../core/utils/responsive_breakpoints.dart';
 import '../../features/settings/presentation/general_settings_provider.dart';
+
+/// Whether a back press is allowed to pop the shell route itself.
+///
+/// Backing out of the app is Android's gesture and still belongs there. On a
+/// desktop window there is nothing underneath this route, so the pop tears the
+/// view down and leaves an empty black window with only the caption buttons —
+/// which is what a stray back press looked like.
+bool shellBackLeavesApp({
+  required bool isAtDefaultHome,
+  required bool isDesktopPlatform,
+}) => isAtDefaultHome && !isDesktopPlatform;
 
 class AppScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -55,11 +67,13 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
     final mq = MediaQuery.of(context);
 
     return PopScope(
-      canPop: isAtDefaultHome,
+      canPop: shellBackLeavesApp(
+        isAtDefaultHome: isAtDefaultHome,
+        isDesktopPlatform: ResponsiveBreakpoints.isDesktopPlatform(),
+      ),
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          widget.navigationShell.goBranch(defaultIndex);
-        }
+        if (didPop || isAtDefaultHome) return;
+        widget.navigationShell.goBranch(defaultIndex);
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
