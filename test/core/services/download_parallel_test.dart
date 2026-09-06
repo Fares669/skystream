@@ -5,18 +5,19 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('adaptive parallel downloads', () {
     test('normalizes supported manual values and junk to Auto', () {
-      for (final value in <int>[0, 1, 2, 4, 6, 8]) {
+      for (final value in <int>[0, 1, 2, 3, 4, 5]) {
         expect(normalizeDownloadPartPreference(value), value);
       }
       expect(normalizeDownloadPartPreference(null), 0);
-      expect(normalizeDownloadPartPreference(3), 0);
+      expect(normalizeDownloadPartPreference(6), 0);
+      expect(normalizeDownloadPartPreference(8), 0);
       expect(normalizeDownloadPartPreference(99), 0);
     });
 
     test('never splits without proven Range support and size', () {
       expect(
         selectAdaptiveDownloadParts(
-          preference: 8,
+          preference: 5,
           totalBytes: 900 * 1024 * 1024,
           supportsRanges: false,
         ),
@@ -24,7 +25,7 @@ void main() {
       );
       expect(
         selectAdaptiveDownloadParts(
-          preference: 8,
+          preference: 5,
           totalBytes: -1,
           supportsRanges: true,
         ),
@@ -32,7 +33,7 @@ void main() {
       );
     });
 
-    test('Auto scales conservatively up to eight parts', () {
+    test('Auto scales conservatively up to five parts', () {
       const mib = 1024 * 1024;
       expect(
         selectAdaptiveDownloadParts(
@@ -56,7 +57,7 @@ void main() {
           totalBytes: 400 * mib,
           supportsRanges: true,
         ),
-        4,
+        3,
       );
       expect(
         selectAdaptiveDownloadParts(
@@ -64,7 +65,7 @@ void main() {
           totalBytes: 900 * mib,
           supportsRanges: true,
         ),
-        6,
+        4,
       );
       expect(
         selectAdaptiveDownloadParts(
@@ -72,7 +73,27 @@ void main() {
           totalBytes: 2 * 1024 * mib,
           supportsRanges: true,
         ),
-        8,
+        5,
+      );
+    });
+
+    test('manual preferences cannot exceed five parts', () {
+      const mib = 1024 * 1024;
+      expect(
+        selectAdaptiveDownloadParts(
+          preference: 5,
+          totalBytes: 2 * 1024 * mib,
+          supportsRanges: true,
+        ),
+        5,
+      );
+      expect(
+        selectAdaptiveDownloadParts(
+          preference: 8,
+          totalBytes: 2 * 1024 * mib,
+          supportsRanges: true,
+        ),
+        5,
       );
     });
 
