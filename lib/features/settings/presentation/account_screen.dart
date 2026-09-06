@@ -7,6 +7,7 @@ import '../../../core/account/animewitcher_account_config.dart';
 import '../../../core/account/animewitcher_account_models.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/localized_text.dart';
+import '../../../core/utils/artwork_quality.dart';
 import '../../../core/utils/layout_constants.dart';
 import '../../../shared/widgets/custom_widgets.dart';
 import '../../../shared/widgets/glass_dialog.dart';
@@ -509,11 +510,18 @@ class _AnimeWitcherAccountScreenState
                 ),
               )
             else
-              Image.network(
-                coverUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => DecoratedBox(
-                  decoration: BoxDecoration(color: colors.primaryContainer),
+              // A profile cover can be four thousand pixels wide. Decoded
+              // whole it is tens of megabytes of RAM to paint a strip a few
+              // hundred pixels tall, and every paint rescales it.
+              ArtworkDecode(
+                paintedWidth: MediaQuery.sizeOf(context).width,
+                builder: (context, decodeWidth) => Image.network(
+                  coverUrl,
+                  fit: BoxFit.cover,
+                  cacheWidth: decodeWidth,
+                  errorBuilder: (_, _, _) => DecoratedBox(
+                    decoration: BoxDecoration(color: colors.primaryContainer),
+                  ),
                 ),
               ),
             // The name and address sit on artwork nobody chose for legibility,
@@ -788,18 +796,22 @@ class _AnimeWitcherAccountScreenState
                             ),
                           ),
                         )
-                      : Image.network(
-                          coverUrl,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          errorBuilder: (_, _, _) => DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: colors.primaryContainer,
-                            ),
-                            child: Icon(
-                              Icons.landscape_rounded,
-                              size: 44,
-                              color: colors.onPrimaryContainer,
+                      : ArtworkDecode(
+                          paintedWidth: MediaQuery.sizeOf(context).width,
+                          builder: (context, decodeWidth) => Image.network(
+                            coverUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            cacheWidth: decodeWidth,
+                            errorBuilder: (_, _, _) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: colors.primaryContainer,
+                              ),
+                              child: Icon(
+                                Icons.landscape_rounded,
+                                size: 44,
+                                color: colors.onPrimaryContainer,
+                              ),
                             ),
                           ),
                         ),

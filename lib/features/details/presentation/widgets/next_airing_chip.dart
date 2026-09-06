@@ -160,6 +160,8 @@ class _NextAiringChipState extends State<NextAiringChip> {
         borderRadius: BorderRadius.circular(kDetailsHeroActionHeight / 2),
         // The same glass as the buttons above it, so the line reads as part
         // of the same row of controls rather than a notice pinned to them.
+        // Matches the pills above it — which is to say, no blur either.
+        fallbackBlur: false,
         fallbackColor: kDetailsHeroGlassFallback,
         fallbackBorder: BorderSide(
           color: colors.onSurfaceVariant.withValues(alpha: 0.12),

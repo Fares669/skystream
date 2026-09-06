@@ -41,6 +41,10 @@ class EpisodeViewModeToggle extends StatelessWidget {
         return AppleLiquidGlassSurface(
           borderRadius: BorderRadius.circular(height / 2),
           // The same dark glass the page's other controls wear.
+          // No blur: this control sits below the artwork, on the page's own flat
+          // background, where a blur costs a per-frame layer and returns a
+          // blurred copy of one colour. The chips over the hero keep theirs.
+          fallbackBlur: false,
           fallbackColor: kDetailsHeroGlassFallback,
           fallbackBorder: BorderSide(
             color: colors.onSurfaceVariant.withValues(alpha: 0.12),

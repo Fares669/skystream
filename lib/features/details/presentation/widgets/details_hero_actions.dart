@@ -151,6 +151,10 @@ class DetailsHeroPill extends StatelessWidget {
     final pill = AppleLiquidGlassSurface(
       borderRadius: BorderRadius.circular(kDetailsHeroActionHeight / 2),
       interactive: onPressed != null,
+      // Five of these sit side by side on the hero and each blur is its own
+      // per-frame layer. The fill is 45% black over a hero that is already
+      // scrimmed, so it carries the look without one.
+      fallbackBlur: false,
       fallbackColor: fallbackColor ?? kDetailsHeroGlassFallback,
       fallbackBorder: BorderSide(
         color: colors.onSurfaceVariant.withValues(alpha: 0.12),
@@ -221,6 +225,7 @@ class DetailsHeroIconButton extends StatelessWidget {
       child: AppleLiquidGlassSurface(
         borderRadius: BorderRadius.circular(kDetailsHeroActionHeight / 2),
         interactive: true,
+        fallbackBlur: false,
         fallbackColor: fallbackColor ?? kDetailsHeroGlassFallback,
         fallbackBorder: BorderSide(
           color: colors.onSurfaceVariant.withValues(alpha: 0.12),

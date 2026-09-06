@@ -1,3 +1,4 @@
+import '../../../core/utils/artwork_quality.dart';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -13,10 +14,7 @@ import 'account_image_crop_screen.dart';
 import 'account_ui_helpers.dart';
 
 class AnimeWitcherProfileEditScreen extends ConsumerStatefulWidget {
-  const AnimeWitcherProfileEditScreen({
-    super.key,
-    required this.profile,
-  });
+  const AnimeWitcherProfileEditScreen({super.key, required this.profile});
 
   final AnimeWitcherProfile profile;
 
@@ -110,22 +108,14 @@ class _AnimeWitcherProfileEditScreenState
               ),
               _field(
                 controller: _bioController,
-                label: appText(
-                  context,
-                  english: 'Bio',
-                  arabic: 'النبذة',
-                ),
+                label: appText(context, english: 'Bio', arabic: 'النبذة'),
                 maxLength: 200,
                 maxLines: 4,
                 keyboardType: TextInputType.multiline,
               ),
               _field(
                 controller: _countryController,
-                label: appText(
-                  context,
-                  english: 'Country',
-                  arabic: 'الدولة',
-                ),
+                label: appText(context, english: 'Country', arabic: 'الدولة'),
                 maxLength: 30,
                 textInputAction: TextInputAction.next,
               ),
@@ -197,12 +187,16 @@ class _AnimeWitcherProfileEditScreenState
         height: double.infinity,
       );
     } else if (coverUrl.isNotEmpty) {
-      cover = Image.network(
-        coverUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (_, _, _) => _coverPlaceholder(colors),
+      cover = ArtworkDecode(
+        paintedWidth: MediaQuery.sizeOf(context).width,
+        builder: (context, decodeWidth) => Image.network(
+          coverUrl,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          cacheWidth: decodeWidth,
+          errorBuilder: (_, _, _) => _coverPlaceholder(colors),
+        ),
       );
     } else {
       cover = _coverPlaceholder(colors);
@@ -239,9 +233,8 @@ class _AnimeWitcherProfileEditScreenState
                     child: FilledButton.tonalIcon(
                       onPressed: busy
                           ? null
-                          : () => _pickImage(
-                              AnimeWitcherProfileImageKind.cover,
-                            ),
+                          : () =>
+                                _pickImage(AnimeWitcherProfileImageKind.cover),
                       icon: const Icon(Icons.photo_camera_back_rounded),
                       label: Text(
                         appText(
@@ -286,9 +279,7 @@ class _AnimeWitcherProfileEditScreenState
                     ),
                     onPressed: busy
                         ? null
-                        : () => _pickImage(
-                            AnimeWitcherProfileImageKind.avatar,
-                          ),
+                        : () => _pickImage(AnimeWitcherProfileImageKind.avatar),
                     icon: const Icon(Icons.photo_camera_rounded),
                   ),
                 ),
@@ -447,10 +438,7 @@ class _AnimeWitcherProfileEditScreenState
 }
 
 class AnimeWitcherChangeEmailScreen extends ConsumerStatefulWidget {
-  const AnimeWitcherChangeEmailScreen({
-    super.key,
-    required this.profile,
-  });
+  const AnimeWitcherChangeEmailScreen({super.key, required this.profile});
 
   final AnimeWitcherProfile profile;
 
@@ -595,10 +583,7 @@ class _AnimeWitcherChangeEmailScreenState
 }
 
 class AnimeWitcherChangePasswordScreen extends ConsumerStatefulWidget {
-  const AnimeWitcherChangePasswordScreen({
-    super.key,
-    required this.profile,
-  });
+  const AnimeWitcherChangePasswordScreen({super.key, required this.profile});
 
   final AnimeWitcherProfile profile;
 
@@ -788,10 +773,7 @@ class _AnimeWitcherChangePasswordScreenState
 }
 
 class _AccountFormScaffold extends StatelessWidget {
-  const _AccountFormScaffold({
-    required this.title,
-    required this.children,
-  });
+  const _AccountFormScaffold({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
