@@ -1,0 +1,79 @@
+name: Verify IMDb rating fallback
+
+on:
+  push:
+    branches: [fix/imdb-rating-fallback]
+    paths:
+      - '.github/imdb_fallback_patch.py'
+      - '.github/workflows/imdb-fallback-patch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imdb-rating-fallback-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/imdb-rating-fallback
+          fetch-depth: 0
+
+      - name: Apply IMDb fallback implementation
+        run: python3 .github/imdb_fallback_patch.py
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.1
+          cache: true
+
+      - name: Install dependencies and generate sources
+        run: |
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Format and diff check
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t dart_files < <(git diff --name-only -- '*.dart')
+          if (( ${#dart_files[@]} )); then
+            dart format "${dart_files[@]}"
+          fi
+          git diff --check
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: IMDb fallback regression tests
+        run: >-
+          flutter test
+          test/core/extensions/providers/animewitcher_ratings_fields_test.dart
+          test/features/details/presentation/details_ratings_test.dart
+          test/features/details/presentation/details_ratings_row_test.dart
+          --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key
+
+      - name: Full Flutter test suite
+        run: |
+          sudo mkdir -p /opt/cursor/artifacts
+          sudo chown -R "$(id -u):$(id -g)" /opt/cursor
+          flutter test --dart-define=ANIMEWITCHER_FIREBASE_API_KEY=test-api-key
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/imdb_fallback_patch.py .github/workflows/imdb-fallback-patch.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: restore IMDb rating fallback"
+          git push origin HEAD:fix/imdb-rating-fallback
